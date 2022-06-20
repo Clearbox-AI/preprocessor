@@ -174,10 +174,3 @@ class Preprocessor:
         Return the list of categorical features.
         """
         return self.categorical_features
-
-
-if __name__ == "__main__":
-    df = pd.read_csv("tests/resources/uci_adult_dataset/dataset.csv")
-    p = Preprocessor(df)
-    p.fit(df)
-    print(p.transform(df))
