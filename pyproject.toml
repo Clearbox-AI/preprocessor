@@ -1,11 +1,15 @@
 [tool.poetry]
-name = "Clearbox AI Preprocessor"
+name = "clearboxai-preprocessor"
 version = "0.1.0"
 description = "A very basic implementation of a preprocessor for tabular data."
 authors = ["Carmine D'Amico <carmine@clearbox.ai>"]
 maintainers = ["Carmine D'Amico <carmine@clearbox.ai>"]
 readme = "README.md"
 repository = "https://github.com/clearbox-ai/preprocessor"
+packages = [
+    { include = "preprocessor" },
+]
+
 
 [tool.poetry.dependencies]
 python = "^3.9"
