@@ -1,4 +1,4 @@
-from preprocessor import __version__
+from clearbox_preprocessor import __version__
 
 
 def test_version():

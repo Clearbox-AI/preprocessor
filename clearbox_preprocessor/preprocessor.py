@@ -4,7 +4,7 @@ import sklearn.compose
 
 from typing import List
 
-from preprocessor.transformers import CategoricalTransformer, NumericalTransformer
+from clearbox_preprocessor.transformers import CategoricalTransformer, NumericalTransformer
 
 
 class Preprocessor:
