@@ -26,7 +26,7 @@ preprocessor = Preprocessor(df)
 At this point, you can use the preprocessor to preprocess the data. It is sufficient to call the `fit` method to fit preprocessor and the `transform` method to transform the data:
 
 ```python
-preprocessor.fit()
+preprocessor.fit(df)
 ds = preprocessor.transform(df)
 ```
 

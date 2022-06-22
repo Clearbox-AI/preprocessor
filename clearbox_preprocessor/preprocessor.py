@@ -4,7 +4,10 @@ import sklearn.compose
 
 from typing import List
 
-from clearbox_preprocessor.transformers import CategoricalTransformer, NumericalTransformer
+from clearbox_preprocessor.transformers import (
+    CategoricalTransformer,
+    NumericalTransformer,
+)
 
 
 class Preprocessor:
@@ -14,9 +17,7 @@ class Preprocessor:
     transformer: sklearn.compose.ColumnTransformer
 
     def __init__(
-        self,
-        data: pd.DataFrame,
-        discarding_threshold: float = 0.9,
+        self, data: pd.DataFrame, discarding_threshold: float = 0.9, n_bins: int = 0
     ):
         """
         Initialize the preprocessor. The preprocessor is initialized with a DataFrame and a threshold for discarding features.
@@ -34,7 +35,7 @@ class Preprocessor:
             transformers_list.append(
                 (
                     "ordinal_transformer",
-                    NumericalTransformer(),
+                    NumericalTransformer(n_bins=n_bins),
                     self.numerical_features,
                 )
             )
