@@ -7,8 +7,9 @@ import polars.selectors as cs
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
 
 class Preprocessor:
-    numerical_features   : List[str]
-    categorical_features : List[str]
+    numerical_features   : Tuple[str]
+    categorical_features : Tuple[str]
+    temporal_features    : Tuple[str]
     discarded_features   : Union[List[str], Dict[str, str]]
     single_value_columns : Dict[str, str]
     
@@ -60,8 +61,8 @@ class Preprocessor:
         # Transform boolean into int
         data = data.with_columns(pl.col(pl.Boolean).cast(pl.UInt8))
 
-        # Transform datetime into int
-        data = data.with_columns(cs.date().as_expr().dt.timestamp('ms'))
+        # Store the names of temporal columns into 'temporal_features'
+        self.temporal_features = cs.expand_selector(data, cs.temporal())
 
         # Store the names of numerical columns into 'numerical_features'
         self.numerical_features = cs.expand_selector(data, cs.numeric())
@@ -86,12 +87,12 @@ class Preprocessor:
 
         if self.get_discarded_info == False:
             self.discarded_features = []
-            # Numnerical & categorical - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
-            lf_ = data.select(pl.any_horizontal(pl.all().count()/pl.len()<0.5, 
-                                                pl.all().drop_nulls().value_counts().count()==1, 
+            # All feature types - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
+            lf_ = data.select(pl.any_horizontal(pl.all().count()/pl.len() < 0.5, 
+                                                pl.all().drop_nulls().value_counts().count() == 1, 
                                                )).collect()
             
-            # Categorical - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
+            # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
             lf_cat = data.select(pl.col(self.categorical_features).value_counts().count()>pl.len()*self.discarding_threshold).collect()
 
             for col in lf_.columns: 
@@ -103,11 +104,11 @@ class Preprocessor:
             self.discarded_features    = dict()
             self.single_value_columns = dict()
 
-            # Numnerical & categorical - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
-            df_50perc_null  = data.select(pl.all().count()/pl.len()<0.5).collect()
-            df_only1value  = data.select(pl.all().drop_nulls().value_counts().count()==1 ).collect()
+            # All feature types - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
+            df_50perc_null  = data.select(pl.all().count()/pl.len() < 0.5).collect()
+            df_only1value  = data.select(pl.all().drop_nulls().value_counts().count() == 1 ).collect()
 
-            # Categorical - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
+            # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
             lf_cat = data.select(pl.col(self.categorical_features).value_counts().count()>pl.len()*self.discarding_threshold).collect()
         
             for col in df_50perc_null.columns: 
@@ -119,13 +120,10 @@ class Preprocessor:
                 elif col in lf_cat.columns and lf_cat.select(pl.col(col)).item() == True:
                     self.discarded_features[col] = "More than discarding_threshold % of values are different from each other"
 
-        # Update the numerical_features and categorical_features lists removing the discarded columns
-        self.numerical_features = tuple(
-            set(self.numerical_features) - set(self.discarded_features)
-        )
-        self.categorical_features = tuple(
-            set(self.categorical_features) - set(self.discarded_features)
-        )
+        # Update the numerical_features, categorical_features and temporal_features lists removing the discarded columns
+        self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
+        self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
+        self.temporal_features    = tuple(set(self.temporal_features)    - set(self.discarded_features))
 
         return data
     
@@ -177,10 +175,12 @@ class Preprocessor:
         else:
             data = data.drop(self.discarded_features)
 
-        # data = self._feature_selection(data, self.discarding_threshold)
+    # Temporal features processing
+        # Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame    
+        data = data.select(cs.temporal().interpolate(), cs.all()-cs.temporal())
 
-      # Numerical features processing
-        # Fill Null values with the mean value
+    # Numerical features processing
+        # Fill Null values with the selcted strategy or value (default: "mean")
         if isinstance(num_fill_null, str):
             data = data.with_columns(cs.numeric().fill_null(strategy=num_fill_null))
         else:
@@ -199,7 +199,7 @@ class Preprocessor:
                     # Standardization of numerical features
                     data = data.with_columns((cs.numeric() - cs.numeric().mean()) /  cs.numeric().std())    
 
-      # Categorical features processing
+    # Categorical features processing
         # Fill Null values with the most frequent value
         for col in self.categorical_features:
             freq_val = data.select(pl.col(col).drop_nulls().mode().first()).collect().item()
@@ -253,7 +253,7 @@ class Preprocessor:
         try:
             getattr(self,"single_value_columns")
             if self.single_value_columns:
-                print('The following single-valued columns discarded contained the value:')
+                print('Discarded single-valued columns and the value contained:')
                 for key, value in self.single_value_columns.items():
                     print("    ", key, ":", value)
             else:
