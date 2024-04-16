@@ -129,7 +129,7 @@ In the case of discarded single-valued columns, the value contained is also disp
 ```python
 preprocessor.get_discarded_features_reason()
 ```
-<img src="https://github.com/Clearbox-AI/preprocessor/assets/152599516/5c5d7a42-d52d-4d32-862d-fc3c95c31d67" alt="image" width="80%" height="auto">
+<img src="https://github.com/Clearbox-AI/preprocessor/assets/152599516/5c5d7a42-d52d-4d32-862d-fc3c95c31d67" alt="image" width="90%" height="auto">
 
 
 ## To do
