@@ -24,7 +24,7 @@ A bunch of options are available to customize the preprocessing.
         The list of discarded columns will be available even if get_discarded_info=False, so consider setting this flag to True only if you need to know why a column was discarded or, if it contained just one value, what that value was.
       
     - `excluded_col: (default = [])`
-    - 
+      
         List containing the names of the columns to be excluded from processing. These columns will be returned in the final dataframe withouth being manipulated. 
 
 2. The mothod `collect` of the class Preprocessor features the following input arguments, besides the input dataset:
