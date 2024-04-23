@@ -231,8 +231,12 @@ class Preprocessor:
             data = data.with_columns(pl.col(col).fill_null(freq_val))
         
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
+        # The Dataframe is sorted according to "time" column if present
         col = cs.string()-cs.by_name(self.excluded_col) 
-        df = data.sort(self.time).collect().to_dummies(col)
+        if self.time:
+            df = data.sort(self.time).collect().to_dummies(col)
+        else:
+            df = data.collect().to_dummies(col)
 
         if self.data_was_pd:
             df = df.to_pandas()
