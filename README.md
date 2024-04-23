@@ -26,7 +26,10 @@ A bunch of options are available to customize the preprocessing.
     - `excluded_col: (default = [])`
       
         List containing the names of the columns to be excluded from processing. These columns will be returned in the final dataframe withouth being manipulated. 
-
+    - `time: (default = None)`
+  
+        String name of the time column by which to sort the dataframe in case of time series.
+      
 2. The mothod `collect` of the class Preprocessor features the following input arguments, besides the input dataset:
     - `scaling: (default="normalize")`
       
