@@ -19,10 +19,12 @@ class Preprocessor:
     Scaling             : TypeAlias = Literal["normalize", "standardize"]
 
     def __init__(
-        self, data: pl.LazyFrame | pd.DataFrame, 
+        self, 
+        data: pl.LazyFrame | pd.DataFrame, 
         discarding_threshold: float = 0.9, 
-        get_discarded_info = False,
-        excluded_col: List = []
+        get_discarded_info: bool = False,
+        excluded_col: List = [],
+        time: str = None
     ):
         """
         Initialize the preprocessor.
@@ -44,6 +46,9 @@ class Preprocessor:
 
         'excluded_col': (default = [])
             List containing the names of the columns to be excluded from processing. These columns will be returned in the final dataframe withouth being manipulated.    
+
+        'time': (default = None)
+            String name of the time column by which to sort the dataframe in case of time series.
         """
 
         # Transform data from Pandas DataFrame to Polars LazyFrame
@@ -56,14 +61,14 @@ class Preprocessor:
         self.discarding_threshold   = discarding_threshold
         self.get_discarded_info     = get_discarded_info
         self.excluded_col           = excluded_col
+        self.time = time
 
         self._infer_feature_types(data)
         self._feature_selection(data)
 
     def _infer_feature_types(self, data: pl.LazyFrame) -> None:
         """
-        Infer the type of each feature in the LazyFrame. The type is either numerical or categorical. 
-        DateTime and Boolean features are converted to numerical by default.
+        Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, temporal or boolean. 
         """
         # Store the names of boolean columns into 'boolean_features'
         self.boolean_features = cs.expand_selector(data, cs.boolean())
@@ -82,12 +87,12 @@ class Preprocessor:
         data: pl.LazyFrame,
     ) -> None:
         """
-        Perform a selection of the most useful columns for a given DataFrame, ignorig the other features. The selection is
+        Perform a selection of the most useful columns for a given DataFrame, ignoring the other features. The selection is
         performed in two steps:
-        1. The columns with more than 50% of missing values are discarded.
-        2. The columns containing only one value or, conversely, a large number of different values are discarded. In the latter
-        case the default threshold is equal to 90%, i.e. if more than 90% of the instances have different values then the entire
-        column is discarded.
+            1. The columns with more than 50% of missing values are discarded.
+            2. The columns containing only one value or, conversely, a large number of different values are discarded. In the latter
+               case the default threshold is equal to 90%, i.e. if more than 90% of the instances have different values then the entire
+               column is discarded.
         """
         # Replace empty strings ("") with None value
         col = cs.string()-cs.by_name(self.excluded_col)
@@ -227,7 +232,7 @@ class Preprocessor:
         
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         col = cs.string()-cs.by_name(self.excluded_col) 
-        df = data.collect().to_dummies(col)
+        df = data.sort(self.time).collect().to_dummies(col)
 
         if self.data_was_pd:
             df = df.to_pandas()
@@ -237,9 +242,9 @@ class Preprocessor:
     def extract_ts_features(self,
                             data: pl.LazyFrame | pd.DataFrame,
                             y: pl.Series | pd.Series,
-                            time: str,
-                            column_id = None,
-                            ):
+                            time: str = None,
+                            column_id:str = None,
+                            ) -> pd.DataFrame:
         """
         Extract relevant time-series features. 
         Input arguments:
@@ -248,7 +253,9 @@ class Preprocessor:
             time: str                           (Name of the time column)
             column_id = None                    (Name of the id column if present)
         """
-        if isinstance(data, (pl.LazyFrame, pl.DataFrame)):
+        if isinstance(data, pl.LazyFrame):
+            data_pd = data.collect().to_pandas()
+        elif isinstance(data, pl.DataFrame):
             data_pd = data.to_pandas()
         elif isinstance(data, pd.DataFrame):
             data_pd = data
@@ -264,6 +271,12 @@ class Preprocessor:
             print("The labels series must be a Polars Series or a Pandas Series")
             return
 
+        if not self.time and not time:
+            print("Please enter a name for the time column")
+            return
+        elif self.time and not time:
+            time = self.time
+        
         features_filtered = extract_relevant_features(data_pd, y, column_sort=time, column_id=column_id)
 
         return features_filtered
