@@ -282,7 +282,8 @@ class Preprocessor:
             time = self.time
         
         features_filtered = extract_relevant_features(data_pd, y, column_sort=time, column_id=column_id)
-
+        self.features_filtered = features_filtered
+        
         return features_filtered
 
     def get_numerical_features(self) -> Tuple[str]:
