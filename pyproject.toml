@@ -16,7 +16,7 @@ python = "^3.9"
 numpy = "^1.22.4"
 pandas = "^1.4.2"
 scikit-learn = "^1.1.1"
-
+polars = "^0.20.27"
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
 hypothesis = "^6.47.0"
