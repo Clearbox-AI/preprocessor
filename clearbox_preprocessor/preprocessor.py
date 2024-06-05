@@ -15,7 +15,7 @@ class Preprocessor:
     discarded_features   : Union[List[str], Dict[str, str]]
     single_value_columns : Dict[str, str]
     
-    FillNullStrategy    : TypeAlias = Literal["forward", "backward", "min", "max", "mean", "zero", "one"]
+    FillNullStrategy    : TypeAlias = Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"]
     Scaling             : TypeAlias = Literal["normalize", "standardize"]
 
     def __init__(
@@ -165,14 +165,15 @@ class Preprocessor:
 
         'num_fill_null': (default = "mean")
             Specifies the value to fill null values with or the strategy for filling null values in numerical features.
-            - value      : fills null values with the specified value  
-            - "mean"     : fills null values with the average of the column
-            - "forward"  : fills null values with the previous non-null value in the column
-            - "backward" : fills null values with the following non-null value in the column
-            - "min"      : fills null values with the minimum value of the column
-            - "max"      : fills null values with the maximum value of the column
-            - "zero"     : fills null values with zeros
-            - "one"      : fills null values with ones
+            - value         : fills null values with the specified value  
+            - "mean"        : fills null values with the average of the column
+            - "interpolate" : fills null values by interpolation
+            - "forward"     : fills null values with the previous non-null value in the column
+            - "backward"    : fills null values with the following non-null value in the column
+            - "min"         : fills null values with the minimum value of the column
+            - "max"         : fills null values with the maximum value of the column
+            - "zero"        : fills null values with zeros
+            - "one"         : fills null values with ones
 
         'n_bins': (default = 0)
             Integer number that determines the number of bins into which numerical features are discretized. When set to 0, the preprocessing step defaults to the scaling method specified in the 'scaling' atgument instead of discretization.
@@ -204,7 +205,10 @@ class Preprocessor:
         # Fill Null values with the selcted strategy or value (default: "mean")
         col = cs.numeric()-cs.by_name(self.excluded_col) 
         if isinstance(num_fill_null, str):
-            data = data.with_columns(col.fill_null(strategy=num_fill_null))
+            if num_fill_null == "interpolate":
+                data = data.with_columns(col).interpolate()
+            else:
+                data = data.with_columns(col.fill_null(strategy=num_fill_null))
         else:
             data = data.with_columns(col.fill_null(num_fill_null))
 
