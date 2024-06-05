@@ -98,16 +98,16 @@ class Preprocessor:
         col = cs.string()-cs.by_name(self.excluded_col)
         data = data.with_columns(col.replace("",None)) 
 
+        col_all = cs.all()-cs.by_name(self.excluded_col)
+        col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
         if self.get_discarded_info == False:
             self.discarded_features = []
             # All feature types - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
-            col_all = cs.all()-cs.by_name(self.excluded_col)
             lf_ = data.select(pl.any_horizontal(col_all.count()/pl.len() < 0.5, 
                                                 col_all.drop_nulls().value_counts().count() == 1, 
                                                )).collect()
             
             # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
-            col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
             lf_cat = data.select(col_cat.value_counts().count()>pl.len()*self.discarding_threshold).collect()
 
             for col in lf_.columns: 
