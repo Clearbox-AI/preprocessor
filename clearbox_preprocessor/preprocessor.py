@@ -61,7 +61,7 @@ class Preprocessor:
         self.discarding_threshold   = discarding_threshold
         self.get_discarded_info     = get_discarded_info
         self.excluded_col           = excluded_col
-        self.time = time
+        self.time                   = time
 
         self._infer_feature_types(data)
         self._feature_selection(data)
@@ -101,14 +101,14 @@ class Preprocessor:
         if self.get_discarded_info == False:
             self.discarded_features = []
             # All feature types - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
-            col = cs.all()-cs.by_name(self.excluded_col)
-            lf_ = data.select(pl.any_horizontal(col.count()/pl.len() < 0.5, 
-                                                col.drop_nulls().value_counts().count() == 1, 
+            col_all = cs.all()-cs.by_name(self.excluded_col)
+            lf_ = data.select(pl.any_horizontal(col_all.count()/pl.len() < 0.5, 
+                                                col_all.drop_nulls().value_counts().count() == 1, 
                                                )).collect()
             
             # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
-            col = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
-            lf_cat = data.select(col.value_counts().count()>pl.len()*self.discarding_threshold).collect()
+            col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
+            lf_cat = data.select(col_cat.value_counts().count()>pl.len()*self.discarding_threshold).collect()
 
             for col in lf_.columns: 
                 if lf_.select(pl.col(col)).item() == True:
@@ -117,16 +117,14 @@ class Preprocessor:
                     self.discarded_features.append(col)
         else:
             self.discarded_features    = dict()
-            self.single_value_columns = dict()
+            self.single_value_columns  = dict()
 
             # All feature types - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
-            col = cs.all()-cs.by_name(self.excluded_col)
-            df_50perc_null  = data.select(col.count()/pl.len() < 0.5).collect()
-            df_only1value  = data.select(col.drop_nulls().value_counts().count() == 1 ).collect()
+            df_50perc_null  = data.select(col_all.count()/pl.len() < 0.5).collect()
+            df_only1value  = data.select(col_all.drop_nulls().value_counts().count() == 1 ).collect()
 
             # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
-            col = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
-            lf_cat = data.select(col.value_counts().count()>pl.len()*self.discarding_threshold).collect()
+            lf_cat = data.select(col_cat.value_counts().count()>pl.len()*self.discarding_threshold).collect()
         
             for col in df_50perc_null.columns: 
                 if df_50perc_null.select(pl.col(col)).item() == True:
@@ -187,8 +185,8 @@ class Preprocessor:
             sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
 
         # Replace empty strings ("") with None value
-        col = cs.string()-cs.by_name(self.excluded_col)
-        data = data.with_columns(col.replace("",None)) 
+        col_str = cs.string()-cs.by_name(self.excluded_col)
+        data = data.with_columns(col_str.replace("",None)) 
 
         # Drop discarded columns, previously defined in _feature_selection()
         if isinstance(self.discarded_features, dict):
@@ -203,44 +201,42 @@ class Preprocessor:
 
     # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
-        col = cs.numeric()-cs.by_name(self.excluded_col) 
+        col_num = cs.numeric()-cs.by_name(self.excluded_col) 
         if isinstance(num_fill_null, str):
             if num_fill_null == "interpolate":
-                data = data.with_columns(col).interpolate()
+                data = data.with_columns(col_num).interpolate()
             else:
-                data = data.with_columns(col.fill_null(strategy=num_fill_null))
+                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
         else:
-            data = data.with_columns(col.fill_null(num_fill_null))
+            data = data.with_columns(col_num.fill_null(num_fill_null))
 
         if n_bins > 0:
             # KBinsDiscretizer applied to numerical features
             labels=list(map(str, list(range(0, n_bins))))
-            col = cs.numeric()-cs.by_name(self.excluded_col) 
-            data = data.with_columns(col.qcut(n_bins, labels=labels))
+            data = data.with_columns(col_num.qcut(n_bins, labels=labels))
         else:
             match scaling:
                 case "normalize":
                     # Normalization of numerical features
-                    col = cs.numeric()-cs.by_name(self.excluded_col) 
-                    data = data.with_columns((col - col.min()) / (col.max() - col.min()))
+                    data = data.with_columns((col_num - col_num.min()) / (col_num.max() - col_num.min()))
                 case "standardize":
                     # Standardization of numerical features
-                    data = data.with_columns((col - col.mean()) /  col.std())    
+                    data = data.with_columns((col_num - col_num.mean()) /  col_num.std())    
 
     # Categorical features processing
         # Fill Null values with the most frequent value
-        cols = set(self.categorical_features) - set(self.excluded_col)
-        for col in cols:
+        col_cat = set(self.categorical_features) - set(self.excluded_col)
+        for col in col_cat:
             freq_val = data.select(pl.col(col).drop_nulls().mode().first()).collect().item()
             data = data.with_columns(pl.col(col).fill_null(freq_val))
         
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
-        col = cs.string()-cs.by_name(self.excluded_col) 
+        col_str = cs.string()-cs.by_name(self.excluded_col) 
         if self.time:
-            df = data.sort(self.time).collect().to_dummies(col)
+            df = data.sort(self.time).collect().to_dummies(col_str)
         else:
-            df = data.collect().to_dummies(col)
+            df = data.collect().to_dummies(col_str)
 
         if self.data_was_pd:
             df = df.to_pandas()
@@ -336,7 +332,7 @@ class Preprocessor:
             If more than discarding_threshold * 100 % of values in a categorical feature are different from each other, then the column is discarded. 
             For example, if discarding_threshold=0.9, a column will be discarded if more than 90% of its values are unique.\n
         'get_discarded_info': (defatult = False)
-            When set to 'True', the preprocessor will feature the methods preprocessor.get_discarded_features_reason, which provides information on which columns were discarded and the reason why, and preprocessor.get_single_valued_columns, which provides the values of the single-valued discarded columns.
+            When set to 'True', the preprocessor will feature the methods preprocessor.get_discarded_features_reason, which provides information on which columns were discarded and the reason why.
             Note that setting get_discarded_info=True will considerably slow down the processing operation!
             The list of discarded columns will be available even if get_discarded_info=False, so consider setting this flag to True only if you need to know why a column was discarded or, if it contained just one value, what that value was.\n\n
         After having initialized the preprocessor, call the following method to start the processing: \n
