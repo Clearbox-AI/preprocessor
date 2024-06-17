@@ -40,12 +40,12 @@ class Preprocessor:
             For example, if discarding_threshold=0.9, a column will be discarded if more than 90% of its values are unique.
 
         'get_discarded_info': (defatult = False)
-            When set to 'True', the preprocessor will feature the methods preprocessor.get_discarded_features_reason, which provides information on which columns were discarded and the reason why, and preprocessor.get_single_valued_columns, which provides the values of the single-valued discarded columns.
+            When set to 'True', the preprocessor will feature the methods preprocessor.get_discarded_features_reason, which provides information on which columns were discarded and the reason why.
             Note that setting get_discarded_info=True will considerably slow down the processing operation!
             The list of discarded columns will be available even if get_discarded_info=False, so consider setting this flag to True only if you need to know why a column was discarded or, if it contained just one value, what that value was.
 
         'excluded_col': (default = [])
-            List containing the names of the columns to be excluded from processing. These columns will be returned in the final dataframe withouth being manipulated.    
+            List containing the names of the columns to be excluded from processing. These columns will be returned in the final dataframe without being manipulated.    
 
         'time': (default = None)
             String name of the time column by which to sort the dataframe in case of time series.
@@ -143,7 +143,7 @@ class Preprocessor:
     
     def collect(self, 
                 data: pl.LazyFrame | pd.DataFrame, 
-                scaling = "normalize", 
+                scaling: str = "normalize", 
                 num_fill_null : FillNullStrategy = "mean",
                 n_bins: int = 0
     ) -> pl.DataFrame | pd.DataFrame:
