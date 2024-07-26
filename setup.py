@@ -16,9 +16,6 @@ setup(
     url="https://github.com/Clearbox-AI/preprocessor",  # Replace with your GitHub repository URL
     packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: Apache Software License v2.0",
-        "Operating System :: Linux",
     ],
     python_requires='>=3.9',
     install_requires=[
