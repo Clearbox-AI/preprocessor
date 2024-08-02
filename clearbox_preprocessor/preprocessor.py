@@ -55,6 +55,9 @@ class Preprocessor:
         if isinstance(data, pd.DataFrame):
             self.data_was_pd = True
             data = pl.from_pandas(data).lazy()
+        elif isinstance(data, pl.DataFrame):
+            data = data.lazy()
+            self.data_was_pd = False
         else:
             self.data_was_pd = False
 
