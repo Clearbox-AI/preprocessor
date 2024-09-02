@@ -61,6 +61,9 @@ class Preprocessor:
         else:
             self.data_was_pd = False
 
+        if discarding_threshold>1 or discarding_threshold<0:
+            raise ValueError("Invalid value for discarding_threshold")
+    
         self.discarding_threshold   = discarding_threshold
         self.get_discarded_info     = get_discarded_info
         self.excluded_col           = excluded_col
