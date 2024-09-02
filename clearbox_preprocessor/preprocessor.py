@@ -182,7 +182,9 @@ class Preprocessor:
         """
         if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
             data = pl.from_pandas(data).lazy()
-        elif isinstance(data, pl.LazyFrame) or isinstance(data, pl.DataFrame) and self.data_was_pd == False:
+        elif isinstance(data, pl.DataFrame) and self.data_was_pd == False:
+            data = data.lazy()
+        elif isinstance(data, pl.LazyFrame) and self.data_was_pd == False:
             pass
         else:
             sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
