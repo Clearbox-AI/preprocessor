@@ -30,7 +30,7 @@ A bunch of options are available to customize the preprocessing.
   
         String name of the time column by which to sort the dataframe in case of time series.
       
-2. The mothod `collect` of the class Preprocessor features the following input arguments, besides the input dataset:
+2. The mothod `transform` of the class Preprocessor features the following input arguments, besides the input dataset:
     - `scaling: (default="normalize")`
       
         Specifies the scaling operation to perform on numerical features.
@@ -97,13 +97,13 @@ q.collect()
 ```
 <img src="https://github.com/Clearbox-AI/preprocessor/assets/152599516/c2e1878d-6af3-4157-8a7d-61fdccfde270" alt="image" width="40%" height="auto">
 
-At this point, you can initialize the Preprocessor by passing the LazyFrame or DataFrame created to it and then calling the `collect()` method to materialize the processed dataframe.
+At this point, you can initialize the Preprocessor by passing the LazyFrame or DataFrame created to it and then calling the `transform()` method to materialize the processed dataframe.
 
 Note that if no argument is specified beyond the dataframe *q*, the default settings are employed for preprocessing:
 
 ```python
 preprocessor = Preprocessor(q)
-df = preprocessor.collect(q)
+df = preprocessor.transform(q)
 df
 ```
 <img src="https://github.com/Clearbox-AI/preprocessor/assets/152599516/7cd5b6f6-26f9-4af9-8250-751f43cac7d5" alt="image" width="70%" height="auto">
@@ -115,13 +115,13 @@ In the following example, when the Preprocessor is initialized:
 2. the discarding featrues informations are stored in the `preprocessor` instance
 3. the column "cha" is excluded from the preprocessing and is preserved unchanged.
 
-When the method `collect()` is called
+When the method `transform()` is called
 1. the scaling method of the numerical features chosen is standardization
 2.  the fill null strategy for numerical features is "forward".
 3.  
 ```python
 preprocessor    = Preprocessor(q, get_discarded_info=True, discarding_threshold = 0.8, excluded_col = ["boo"])
-df = preprocessor.collect(q, scaling = "standardize", num_fill_null = "forward")
+df = preprocessor.transform(q, scaling = "standardize", num_fill_null = "forward")
 df
 ```
 <img src="https://github.com/Clearbox-AI/preprocessor/assets/152599516/ba61531d-a462-4d58-847a-47127d6050fd" alt="image" width="52%" height="auto">

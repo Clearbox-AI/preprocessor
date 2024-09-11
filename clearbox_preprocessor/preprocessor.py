@@ -19,13 +19,13 @@ class Preprocessor:
     Scaling             : TypeAlias = Literal["normalize", "standardize"]
 
     def __init__(
-        self, 
-        data: pl.LazyFrame | pd.DataFrame, 
-        discarding_threshold: float = 0.9, 
-        get_discarded_info: bool = False,
-        excluded_col: List = [],
-        time: str = None
-    ):
+            self, 
+            data: pl.LazyFrame | pd.DataFrame, 
+            discarding_threshold: float = 0.9, 
+            get_discarded_info: bool = False,
+            excluded_col: List = [],
+            time: str = None
+        ):
         """
         Initialize the preprocessor.
 
@@ -89,9 +89,9 @@ class Preprocessor:
         self.categorical_features = cs.expand_selector(data, cs.string())
 
     def _feature_selection(
-        self,
-        data: pl.LazyFrame,
-    ) -> None:
+                        self,
+                        data: pl.LazyFrame,
+                    ) -> None:
         """
         Perform a selection of the most useful columns for a given DataFrame, ignoring the other features. The selection is
         performed in two steps:
@@ -147,17 +147,17 @@ class Preprocessor:
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
         self.temporal_features    = tuple(set(self.temporal_features)    - set(self.discarded_features))
     
-    def collect(self, 
+    def transform(self, 
                 data: pl.LazyFrame | pd.DataFrame, 
                 scaling: str = "normalize", 
                 num_fill_null : FillNullStrategy = "mean",
                 n_bins: int = 0
-    ) -> pl.DataFrame | pd.DataFrame:
+            ) -> pl.DataFrame | pd.DataFrame:
         """
         The preliminary operations deal with distinguishing numerical columns from categorical columns and discarding the columns
         that do not carry significant information. Then the processing steps are defined and carried out for each type of column.
 
-        Below are listed all the possible values for the arguments of the method .collect()
+        Below are listed all the possible values for the arguments of the method .transform()
 
         'data':
             The dataset passed to the Preprocessor can be a Polars LazyFrame or a Pandas DataFrame.
@@ -256,7 +256,7 @@ class Preprocessor:
                             y: pl.Series | pd.Series,
                             time: str = None,
                             column_id:str = None,
-                            ) -> pd.DataFrame:
+                        ) -> pd.DataFrame:
         """
         Extract relevant time-series features. 
         Input arguments:
@@ -325,7 +325,7 @@ class Preprocessor:
                 if value =='More than discarding_threshold % of values are different from each other':
                     print("    ", key)
         except AttributeError:
-            print("AttributeError\nThe preprocessor has no attribute 'discarded_features'.\nMake sure you called the method 'preprocessor.collect(your_LazyFrame)' or you set the argument 'get_discarded_info=True' when initializing the Prprocessor to assess the discarded features.")
+            print("AttributeError\nThe preprocessor has no attribute 'discarded_features'.\nMake sure you called the method 'preprocessor.transform(your_LazyFrame)' or you set the argument 'get_discarded_info=True' when initializing the Prprocessor to assess the discarded features.")
 
     def help(self):
         """
@@ -344,8 +344,8 @@ class Preprocessor:
             Note that setting get_discarded_info=True will considerably slow down the processing operation!
             The list of discarded columns will be available even if get_discarded_info=False, so consider setting this flag to True only if you need to know why a column was discarded or, if it contained just one value, what that value was.\n\n
         After having initialized the preprocessor, call the following method to start the processing: \n
-            preprocessor.collect(your_dataframe, num_fill_null_strat="mean", n_bins : int  = 0)\n
-        Below are listed all the possible values for the arguments of the method .collect():\n
+            preprocessor.transform(your_dataframe, num_fill_null_strat="mean", n_bins : int  = 0)\n
+        Below are listed all the possible values for the arguments of the method .transform():\n
         'scaling': (default="normalize")
             Specifies the scaling operation to perform on numerical features.
             - "normalize"   : applies normalization to numerical features
