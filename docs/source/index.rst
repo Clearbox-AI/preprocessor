@@ -3,11 +3,17 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-.. include:: doc.md
+.. include:: doc_1.md
    :parser: markdown
+
+.. image:: img/Loop_no_background.png
+   :alt: preprocessor image
 
 Clearbox Preprocessor
 ===================================
+
+.. include:: doc_1.md
+   :parser: markdown
 
 .. toctree::
    :maxdepth: 2
