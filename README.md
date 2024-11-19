@@ -1,3 +1,8 @@
+[![Documentation Status](https://readthedocs.org/projects/clearbox-preprocessor/badge/?version=latest)](https://clearbox-sure.readthedocs.io/en/latest/?badge=latest)
+[![PyPI](https://badge.fury.io/py/clearbox-preprocessor.svg)](https://badge.fury.io/py/clearbox-preprocessor)
+[![Downloads](https://pepy.tech/badge/clearbox-preprocessor)](https://pepy.tech/project/clearbox-preprocessor)
+[![GitHub stars](https://img.shields.io/github/stars/Clearbox-AI/preprocessor?style=social)](https://github.com/Clearbox-AI/preprocessor)
+
 # Clearbox AI Preprocessor
 
 This repository contains the continuation of the work presented in our series of blogposts *"The whys and hows of data preparation"* ([part 1](https://www.clearbox.ai/blog/2022-01-25-the-whys-and-hows-of-data-preparation), [part 2](https://www.clearbox.ai/blog/2022-02-22-the-whys-and-hows-of-data-preparation-part-2), [part 3](https://www.clearbox.ai/blog/2022-07-05-the-whys-and-hows-of-data-preparation-part-3)). 

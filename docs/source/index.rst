@@ -12,7 +12,7 @@
 Clearbox Preprocessor
 ===================================
 
-.. include:: doc_1.md
+.. include:: doc_2.md
    :parser: markdown
 
 .. toctree::
@@ -23,6 +23,6 @@ Modules
 -------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
 
    api/modules.rst
