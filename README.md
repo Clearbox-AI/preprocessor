@@ -71,8 +71,9 @@ It returns the most relevant features selected among a wide range of features.
 
 You can install the preprocessor by running the following command:
 
-`pip install clearbox_preprocessor`
-
+```shell
+$ pip install clearbox-preprocessor
+```
 
 ## Usage
 You can start using the Preprocessor by importing it and creating a `Pandas.DataFrame` or a `Polars.LazyFrame`:

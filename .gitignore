@@ -162,3 +162,4 @@ cython_debug/
 # test data and Jupyter notebook
 clearbox_preprocessor/part-00337-eb3e7f14-fdff-4a4f-ab7e-f6831400bdea.c000.csv
 clearbox_preprocessor/test.ipynb
+docs/build/*
