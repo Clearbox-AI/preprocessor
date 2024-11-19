@@ -6,11 +6,12 @@
 .. include:: doc_1.md
    :parser: markdown
 
-.. image:: img/Loop_no_background.png
-   :alt: preprocessor image
 
 Clearbox Preprocessor
 ===================================
+
+.. image:: img/Loop_no_background_2.png
+   :alt: preprocessor image
 
 .. include:: doc_2.md
    :parser: markdown
@@ -23,6 +24,6 @@ Modules
 -------
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
 
-   api/modules.rst
+   api/clearbox_preprocessor.rst
