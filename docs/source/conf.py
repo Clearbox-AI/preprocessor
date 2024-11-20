@@ -18,9 +18,12 @@ extensions = [
     'sphinx.ext.autodoc',
     "sphinx.ext.coverage",
     'sphinx.ext.napoleon',
+    "sphinxemoji.sphinxemoji"
     "myst_parser",
     'sphinx_rtd_theme'
 ]
+
+sphinxemoji_style = 'twemoji'
 
 myst_enable_extensions = [
     "html_image", # Allows html images format conversion
