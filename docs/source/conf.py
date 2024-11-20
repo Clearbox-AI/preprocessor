@@ -18,7 +18,7 @@ extensions = [
     'sphinx.ext.autodoc',
     "sphinx.ext.coverage",
     'sphinx.ext.napoleon',
-    "sphinxemoji.sphinxemoji"
+    "sphinxemoji.sphinxemoji",
     "myst_parser",
     'sphinx_rtd_theme'
 ]
