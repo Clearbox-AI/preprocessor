@@ -1,4 +1,4 @@
-A fast and flexible data preprocessor by Clearbox.ai. :zap:
+A fast and flexible data preprocessor by Clearbox.ai. ⚡
 
 ### Installation
 
