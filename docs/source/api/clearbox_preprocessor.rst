@@ -1,3 +1,4 @@
+
 .. toctree::
    :maxdepth: 4
    
@@ -11,3 +12,5 @@ Module contents
 
 .. automodule:: clearbox_preprocessor
    :members:
+   :undoc-members:
+   :show-inheritance:

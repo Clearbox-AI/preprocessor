@@ -26,4 +26,4 @@ Modules
 .. toctree::
    :maxdepth: 2
 
-   api/clearbox_preprocessor
+   api/clearbox_preprocessor.rst
