@@ -11,6 +11,12 @@ copyright = '2024, Clearbox AI'
 author = 'Dario Brunelli'
 release = '0.9.7'
 
+import os
+import sys
+
+# Add the root of your project to sys.path
+sys.path.insert(0, os.path.abspath('../../'))
+
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 

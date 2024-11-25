@@ -1,5 +1,5 @@
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
 
 .. automodule:: clearbox_preprocessor.preprocessor
    :members:
