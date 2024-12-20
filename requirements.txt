@@ -1,7 +1,7 @@
 numpy<2.0.0
 pandas
 scikit-learn
-polars<1.0.0
+polars<1.7.1
 tsfresh
 sphinx_rtd_theme
 myst_parser
