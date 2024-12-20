@@ -9,6 +9,7 @@ from tsfresh import extract_relevant_features
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
 import bisect
 from clearbox_preprocessor.utils.numerical_transformers import calculate_quantile_mappings, transform_with_quantiles
+import warnings
 
 
 class Preprocessor:
@@ -48,7 +49,8 @@ class Preprocessor:
             scaling: str = "normalize", 
             num_fill_null : FillNullStrategy = "mean",
             cat_labels_threshold: float = 0.01,
-
+            unseen_labels = 'ignore',
+            target_columns = None,
         ):
         """
         Initialize the Preprocessor class.
@@ -103,6 +105,10 @@ class Preprocessor:
             numerical features are discretized into the specified number of bins using quantile-based
             binning. If 0, the scaling method specified in `scaling` is applied instead.
 
+        unseen_labels : str, default="ignore"
+            - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
+            - "error"         : Raise an error if new data contains labels unseen during fit.
+
         Raises
         ------
         ValueError
@@ -128,6 +134,7 @@ class Preprocessor:
             raise ValueError("Invalid value for discarding_threshold")
     
         self.discarding_threshold   = discarding_threshold
+        self.discarded_info = []
         self.missing_threshold      = missing_values_threshold
         self.get_discarded_info     = get_discarded_info
         self.excluded_col           = excluded_col
@@ -141,10 +148,11 @@ class Preprocessor:
         self.num_fill_null = num_fill_null
         self.scaling = scaling
         col_num = cs.numeric()-cs.by_name(self.excluded_col) 
+        col_str = cs.string()-cs.by_name(self.excluded_col) 
         data_shape = data.select(pl.len()).collect()['len'][0]
         self.cat_labels_threshold = cat_labels_threshold
         rare_labels_dict = {}
-
+        self.unseen_labels = unseen_labels
         for col in data.select(cs.string()-cs.by_name(self.excluded_col)).columns:
             freq = (
                 data
@@ -163,9 +171,18 @@ class Preprocessor:
             else:
                 rare_values_list = []
             rare_labels_dict[col] = rare_values_list
-
+        
         
         self.rare_labels = rare_labels_dict
+        for col in self.rare_labels.keys():
+            data = data.with_columns(
+                pl.when(pl.col(col).is_in(self.rare_labels[col]))
+                .then(pl.lit("other"))
+                .otherwise(pl.col(col))
+                .alias(col)
+            )
+        self.one_hot_encoded_columns = data.select(col_str).collect().to_dummies().columns
+        
         if self.nbins > 0:
             # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
             # This is useful for transforming continuous data into categorical data, which can be beneficial for certain types of analysis or models.
@@ -231,10 +248,14 @@ class Preprocessor:
 
         for col in lf_.columns: 
             if lf_.select(pl.col(col)).item() == True:
-                self.discarded_features.append(col)
+                warning_message = f"{col} contains a unique value"
+                warnings.warn(warning_message)
+                self.discarded_info.append(warning_message)
             elif col in lf_cat.columns and lf_cat.select(pl.col(col)).item() == True:
+                warning_message = f"{col} contains too many labels"                
                 self.discarded_features.append(col)
-
+                warnings.warn(warning_message)
+                self.discarded_info.append(warning_message)
 
         # Update the numerical_features, categorical_features and temporal_features lists removing the discarded columns
         self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
@@ -348,14 +369,27 @@ class Preprocessor:
                                                         output_distribution="normal")    
                     for col in num_data.columns:
                         data = data.with_columns(num_data[col].alias(col))
+                        
+        
+
         if self.time:
             df = data.sort(self.time).to_dummies(col_str)
         else:
             df = data.to_dummies(col_str)
 
-        if self.data_was_pd:
-            df = df.to_pandas()
 
+        if self.unseen_labels == 'error' and len([i for i in df.columns if i not in self.one_hot_encoded_columns]):
+            raise ValueError("New data contains unseen labels")
+        
+        not_in_new_data = [i for i in self.one_hot_encoded_columns if i not in data.columns]
+        for i in not_in_new_data:
+            df = df.with_columns(pl.lit(0).alias(i))
+        df = df[list(self.numerical_features)+
+                    self.one_hot_encoded_columns+
+                    list(self.boolean_features)]
+
+        if self.data_was_pd:
+            df = df.to_pandas()        
         return df
 
     def extract_ts_features(

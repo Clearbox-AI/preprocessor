@@ -1,8 +1,8 @@
-numpy<2.0.0
+numpy
 pandas
 scikit-learn
-polars<1.7.1
-tsfresh
+polars<=1.17.1
+tsfresh==0.20.3
 sphinx_rtd_theme
 myst_parser
 sphinxemoji
