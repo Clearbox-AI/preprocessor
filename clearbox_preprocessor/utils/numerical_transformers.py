@@ -38,7 +38,7 @@ def transform_with_quantiles(new_data, quantile_maps, output_distribution="unifo
     """
     transformed_data = {}
     for col in new_data.columns:
-        if col in quantile_maps:
+        if col in quantile_maps.keys():
             train_values, train_quantiles = quantile_maps[col]
             new_values = new_data[col].to_numpy()
             

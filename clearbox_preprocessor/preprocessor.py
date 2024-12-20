@@ -8,7 +8,7 @@ from tsfresh import extract_relevant_features
 
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
 import bisect
-from utils import calculate_quantile_mappings, transform_with_quantiles
+from clearbox_preprocessor.utils.numerical_transformers import calculate_quantile_mappings, transform_with_quantiles
 
 
 class Preprocessor:
@@ -166,11 +166,11 @@ class Preprocessor:
 
         
         self.rare_labels = rare_labels_dict
-        
         if self.nbins > 0:
             # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
             # This is useful for transforming continuous data into categorical data, which can be beneficial for certain types of analysis or models.
-            self.nbins_labels=list(map(str, list(range(0, n_bins))))        
+            self.nbins_labels=list(map(str, list(range(0, n_bins))))     
+        else:
             match scaling:
                 case "normalize":
                     # Normalization parameters of numerical features
@@ -181,7 +181,7 @@ class Preprocessor:
                     self.numerical_parameters = [data.select(col_num).mean().collect(), 
                                                  data.select(col_num).std().collect()] 
                 case "quantile":
-                    quantile_maps = calculate_quantile_mappings(data.select(col_num).collect())                    
+                    quantile_maps = calculate_quantile_mappings(data.select(col_num).collect())      
                     self.numerical_parameters = quantile_maps
                 case _:
                     raise ValueError(f"Unknown scaling method: {scaling}")
@@ -232,10 +232,8 @@ class Preprocessor:
         for col in lf_.columns: 
             if lf_.select(pl.col(col)).item() == True:
                 self.discarded_features.append(col)
-                print(1, col)
             elif col in lf_cat.columns and lf_cat.select(pl.col(col)).item() == True:
                 self.discarded_features.append(col)
-                print(2, col)
 
 
         # Update the numerical_features, categorical_features and temporal_features lists removing the discarded columns
@@ -345,9 +343,11 @@ class Preprocessor:
                         data = data.with_columns((pl.col(col) - col_mean) /  col_std)    
                 case "quantile":
                     # Quantile transformation of numerical features
-                    data = transform_with_quantiles(data.select(col_num), 
-                                                    self.numerical_parameters, 
-                                                    output_distribution="normal")       
+                    num_data = transform_with_quantiles(data.select(col_num), 
+                                                        self.numerical_parameters, 
+                                                        output_distribution="normal")    
+                    for col in num_data.columns:
+                        data = data.with_columns(num_data[col].alias(col))
         if self.time:
             df = data.sort(self.time).to_dummies(col_str)
         else:
