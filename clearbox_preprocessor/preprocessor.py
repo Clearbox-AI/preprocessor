@@ -120,7 +120,7 @@ class Preprocessor:
         - The methods `_infer_feature_types` and `_feature_selection` are called to handle feature type
         inference and feature selection.
         """
-        # Transform data from Pandas DataFrame to Polars LazyFrame
+        # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
         if isinstance(data, pd.DataFrame):
             self.data_was_pd = True
             data = pl.from_pandas(data).lazy()
@@ -153,6 +153,7 @@ class Preprocessor:
         self.cat_labels_threshold = cat_labels_threshold
         rare_labels_dict = {}
         self.unseen_labels = unseen_labels
+
         for col in data.select(cs.string()-cs.by_name(self.excluded_col)).columns:
             freq = (
                 data
@@ -296,6 +297,7 @@ class Preprocessor:
         - Numerical features can be normalized, standardized, or discretized based on the specified parameters.
         - Temporal features are filled using interpolation and reordered to the beginning of the dataset.
         """
+        # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
         if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
             data = pl.from_pandas(data).lazy()
         elif isinstance(data, pl.DataFrame) and self.data_was_pd == False:
@@ -353,14 +355,14 @@ class Preprocessor:
                 case "normalize":
                     # Normalization of numerical features
                     for col in data.select(col_num).columns:
-                        col_min = self.numerical_parameters[0][col][0]
-                        col_max = self.numerical_parameters[1][col][0]
+                        col_min = self.numerical_parameters[0][col].item()
+                        col_max = self.numerical_parameters[1][col].item()
                         data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
                 case "standardize":
                     # Standardization of numerical features
                     for col in data.select(col_num).columns:
-                        col_mean = self.numerical_parameters[0]
-                        col_std = self.numerical_parameters[1]
+                        col_mean = self.numerical_parameters[0][col].item()
+                        col_std  = self.numerical_parameters[1][col].item()
                         data = data.with_columns((pl.col(col) - col_mean) /  col_std)    
                 case "quantile":
                     # Quantile transformation of numerical features
@@ -369,8 +371,6 @@ class Preprocessor:
                                                         output_distribution="normal")    
                     for col in num_data.columns:
                         data = data.with_columns(num_data[col].alias(col))
-                        
-        
 
         if self.time:
             df = data.sort(self.time).to_dummies(col_str)
