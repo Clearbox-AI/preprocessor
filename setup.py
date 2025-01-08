@@ -7,7 +7,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="clearbox-preprocessor",  
-    version="0.9.9",  
+    version="0.9.10",  
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
     description="A polars based preprocessor for ML datasets",
