@@ -7,6 +7,10 @@ import polars.selectors as cs
 from tsfresh import extract_relevant_features
 
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
+import bisect
+from clearbox_preprocessor.utils.numerical_transformers import calculate_quantile_mappings, transform_with_quantiles
+import warnings
+
 
 class Preprocessor:
     numerical_features   : Tuple[str]
@@ -15,7 +19,7 @@ class Preprocessor:
     discarded_features   : Union[List[str], Dict[str, str]]
     single_value_columns : Dict[str, str]
     FillNullStrategy     : TypeAlias = Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"]
-    Scaling              : TypeAlias = Literal["normalize", "standardize"]
+    Scaling              : TypeAlias = Literal["normalize", "standardize", "quantile"]
     """
     A class for preprocessing datasets, including feature selection, handling missing values, scaling, 
     and time-series feature extraction.
@@ -39,7 +43,14 @@ class Preprocessor:
             discarding_threshold: float = 0.9, 
             get_discarded_info: bool = False,
             excluded_col: List = [],
-            time: str = None
+            time: str = None,
+            missing_values_threshold: float = 0.999,
+            n_bins: int = 0,
+            scaling: str = "normalize", 
+            num_fill_null : FillNullStrategy = "mean",
+            cat_labels_threshold: float = 0.01,
+            unseen_labels = 'ignore',
+            target_columns = None,
         ):
         """
         Initialize the Preprocessor class.
@@ -70,6 +81,34 @@ class Preprocessor:
         time : str, optional, default=None
             The name of the time column to sort the DataFrame in case of time series data.
 
+       scaling : str, default="normalize"
+            The method used to scale numerical features:
+            - "normalize"   : Normalizes numerical features to the [0, 1] range.
+            - "standardize" : Standardizes numerical features to have a mean of 0 and a standard deviation of 1.
+            - "quantile" : Transforms numerical features using quantiles information.
+
+
+        num_fill_null : FillNullStrategy or str, default="mean"
+            Strategy or value used to fill null values in numerical features:
+            - "mean"        : Fills null values with the mean of the column.
+            - "interpolate" : Fills null values using interpolation.
+            - "forward"     : Fills null values using the previous non-null value.
+            - "backward"    : Fills null values using the next non-null value.
+            - "min"         : Fills null values with the minimum value of the column.
+            - "max"         : Fills null values with the maximum value of the column.
+            - "zero"        : Fills null values with zeros.
+            - "one"         : Fills null values with ones.
+            - value         : Fills null values with the specified value.
+
+        n_bins : int, default=0
+            Number of bins to discretize numerical features. If set to a value greater than 0,
+            numerical features are discretized into the specified number of bins using quantile-based
+            binning. If 0, the scaling method specified in `scaling` is applied instead.
+
+        unseen_labels : str, default="ignore"
+            - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
+            - "error"         : Raise an error if new data contains labels unseen during fit.
+
         Raises
         ------
         ValueError
@@ -81,7 +120,7 @@ class Preprocessor:
         - The methods `_infer_feature_types` and `_feature_selection` are called to handle feature type
         inference and feature selection.
         """
-        # Transform data from Pandas DataFrame to Polars LazyFrame
+        # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
         if isinstance(data, pd.DataFrame):
             self.data_was_pd = True
             data = pl.from_pandas(data).lazy()
@@ -95,12 +134,76 @@ class Preprocessor:
             raise ValueError("Invalid value for discarding_threshold")
     
         self.discarding_threshold   = discarding_threshold
+        self.discarded_info = []
+        self.missing_threshold      = missing_values_threshold
         self.get_discarded_info     = get_discarded_info
         self.excluded_col           = excluded_col
         self.time                   = time
 
         self._infer_feature_types(data)
         self._feature_selection(data)
+        self.nbins_labels = None
+        self.nbins = n_bins
+        self.numerical_parameters = None
+        self.num_fill_null = num_fill_null
+        self.scaling = scaling
+        col_num = cs.numeric()-cs.by_name(self.excluded_col) 
+        col_str = cs.string()-cs.by_name(self.excluded_col) 
+        data_shape = data.select(pl.len()).collect()['len'][0]
+        self.cat_labels_threshold = cat_labels_threshold
+        rare_labels_dict = {}
+        self.unseen_labels = unseen_labels
+
+        for col in data.select(cs.string()-cs.by_name(self.excluded_col)).columns:
+            freq = (
+                data
+                .group_by(col)
+                .agg(pl.len().alias("frequency"))
+            )
+
+            rare_labels = (
+                freq
+                .filter(pl.col("frequency") < self.cat_labels_threshold * data_shape)
+                .select(col)
+                .collect()  
+            )
+            if rare_labels.height > 0:
+                rare_values_list = rare_labels.get_column(col).to_list()
+            else:
+                rare_values_list = []
+            rare_labels_dict[col] = rare_values_list
+        
+        
+        self.rare_labels = rare_labels_dict
+        for col in self.rare_labels.keys():
+            data = data.with_columns(
+                pl.when(pl.col(col).is_in(self.rare_labels[col]))
+                .then(pl.lit("other"))
+                .otherwise(pl.col(col))
+                .alias(col)
+            )
+        self.one_hot_encoded_columns = data.select(col_str).collect().to_dummies().columns
+        
+        if self.nbins > 0:
+            # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
+            # This is useful for transforming continuous data into categorical data, which can be beneficial for certain types of analysis or models.
+            self.nbins_labels=list(map(str, list(range(0, n_bins))))     
+        else:
+            match scaling:
+                case "normalize":
+                    # Normalization parameters of numerical features
+                    self.numerical_parameters = [data.select(col_num).min().collect(), 
+                                                 data.select(col_num).max().collect()]
+                case "standardize":
+                    # Standardization parameters of numerical features
+                    self.numerical_parameters = [data.select(col_num).mean().collect(), 
+                                                 data.select(col_num).std().collect()] 
+                case "quantile":
+                    quantile_maps = calculate_quantile_mappings(data.select(col_num).collect())      
+                    self.numerical_parameters = quantile_maps
+                case _:
+                    raise ValueError(f"Unknown scaling method: {scaling}")
+
 
     def _infer_feature_types(self, data: pl.LazyFrame) -> None:
         """
@@ -125,7 +228,7 @@ class Preprocessor:
         """
         Perform a selection of the most useful columns for a given DataFrame, ignoring the other features. The selection is
         performed in two steps:
-            1. The columns with more than 50% of missing values are discarded.
+            1. The columns with more than 90% of missing values are discarded.
             2. The columns containing only one value or, conversely, a large number of different values are discarded. In the latter
                case the default threshold is equal to 90%, i.e. if more than 90% of the instances have different values then the entire
                column is discarded.
@@ -136,40 +239,24 @@ class Preprocessor:
 
         col_all = cs.all()-cs.by_name(self.excluded_col)
         col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
-        if self.get_discarded_info == False:
-            self.discarded_features = []
-            # All feature types - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
-            lf_ = data.select(pl.any_horizontal(col_all.count()/pl.len() < 0.5, 
-                                                col_all.drop_nulls().value_counts().count() == 1, 
+        self.discarded_features = []
+        # All feature types - Discard columns if more than missing_threshold% of values is null or all values are equal (only one value in the column)
+        lf_ = data.select(pl.any_horizontal(col_all.drop_nulls().value_counts().count() == 1, 
                                                )).collect()
             
-            # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
-            lf_cat = data.select(col_cat.value_counts().count()>pl.len()*self.discarding_threshold).collect()
+        # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
+        lf_cat = data.select(col_cat.value_counts().count()>pl.len()*self.discarding_threshold).collect()
 
-            for col in lf_.columns: 
-                if lf_.select(pl.col(col)).item() == True:
-                    self.discarded_features.append(col)
-                elif col in lf_cat.columns and lf_cat.select(pl.col(col)).item() == True:
-                    self.discarded_features.append(col)
-        else:
-            self.discarded_features    = dict()
-            self.single_value_columns  = dict()
-
-            # All feature types - Discard columns if more than 50% of values is null or all values are equal (only one value in the column)
-            df_50perc_null  = data.select(col_all.count()/pl.len() < 0.5).collect()
-            df_only1value  = data.select(col_all.drop_nulls().value_counts().count() == 1 ).collect()
-
-            # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
-            lf_cat = data.select(col_cat.value_counts().count()>pl.len()*self.discarding_threshold).collect()
-        
-            for col in df_50perc_null.columns: 
-                if df_50perc_null.select(pl.col(col)).item() == True:
-                    self.discarded_features[col] = "More than 50% of the values is null or empty"
-                elif df_only1value.select(pl.col(col)).item() == True:
-                    self.discarded_features[col] = "All vales are equal"
-                    self.single_value_columns[col] = data.select(pl.col(col).first()).collect().item()
-                elif col in lf_cat.columns and lf_cat.select(pl.col(col)).item() == True:
-                    self.discarded_features[col] = "More than discarding_threshold % of values are different from each other"
+        for col in lf_.columns: 
+            if lf_.select(pl.col(col)).item() == True:
+                warning_message = f"{col} contains a unique value"
+                warnings.warn(warning_message)
+                self.discarded_info.append(warning_message)
+            elif col in lf_cat.columns and lf_cat.select(pl.col(col)).item() == True:
+                warning_message = f"{col} contains too many labels"                
+                self.discarded_features.append(col)
+                warnings.warn(warning_message)
+                self.discarded_info.append(warning_message)
 
         # Update the numerical_features, categorical_features and temporal_features lists removing the discarded columns
         self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
@@ -180,9 +267,6 @@ class Preprocessor:
     def transform(
             self, 
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame, 
-            scaling: str = "normalize", 
-            num_fill_null : FillNullStrategy = "mean",
-            n_bins: int = 0
         ) -> pl.DataFrame | pd.DataFrame:
         """
         Transform the input dataset by processing numerical, temporal, and categorical columns.
@@ -194,28 +278,6 @@ class Preprocessor:
         data : pl.LazyFrame or pl.DataFrame or pd.DataFrame
             The input dataset to be transformed. It can be a Polars LazyFrame, Polars DataFrame,
             or a Pandas DataFrame.
-
-        scaling : str, default="normalize"
-            The method used to scale numerical features:
-            - "normalize"   : Normalizes numerical features to the [0, 1] range.
-            - "standardize" : Standardizes numerical features to have a mean of 0 and a standard deviation of 1.
-
-        num_fill_null : FillNullStrategy or str, default="mean"
-            Strategy or value used to fill null values in numerical features:
-            - "mean"        : Fills null values with the mean of the column.
-            - "interpolate" : Fills null values using interpolation.
-            - "forward"     : Fills null values using the previous non-null value.
-            - "backward"    : Fills null values using the next non-null value.
-            - "min"         : Fills null values with the minimum value of the column.
-            - "max"         : Fills null values with the maximum value of the column.
-            - "zero"        : Fills null values with zeros.
-            - "one"         : Fills null values with ones.
-            - value         : Fills null values with the specified value.
-
-        n_bins : int, default=0
-            Number of bins to discretize numerical features. If set to a value greater than 0,
-            numerical features are discretized into the specified number of bins using quantile-based
-            binning. If 0, the scaling method specified in `scaling` is applied instead.
 
         Returns
         -------
@@ -235,6 +297,7 @@ class Preprocessor:
         - Numerical features can be normalized, standardized, or discretized based on the specified parameters.
         - Temporal features are filled using interpolation and reordered to the beginning of the dataset.
         """
+        # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
         if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
             data = pl.from_pandas(data).lazy()
         elif isinstance(data, pl.DataFrame) and self.data_was_pd == False:
@@ -262,45 +325,71 @@ class Preprocessor:
     # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
         col_num = cs.numeric()-cs.by_name(self.excluded_col) 
-        if isinstance(num_fill_null, str):
-            if num_fill_null == "interpolate":
+        if isinstance(self.num_fill_null, str):
+            if self.num_fill_null == "interpolate":
                 data = data.with_columns(col_num).interpolate()
             else:
-                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
+                data = data.with_columns(col_num.fill_null(strategy=self.num_fill_null))
         else:
-            data = data.with_columns(col_num.fill_null(num_fill_null))
-
-        if n_bins > 0:
-            # KBinsDiscretizer applied to numerical features
-            labels=list(map(str, list(range(0, n_bins))))
-            data = data.with_columns(col_num.qcut(n_bins, labels=labels))
-        else:
-            match scaling:
-                case "normalize":
-                    # Normalization of numerical features
-                    data = data.with_columns((col_num - col_num.min()) / (col_num.max() - col_num.min()))
-                case "standardize":
-                    # Standardization of numerical features
-                    data = data.with_columns((col_num - col_num.mean()) /  col_num.std())    
-
-    # Categorical features processing
-        # Fill Null values with the most frequent value
-        col_cat = set(self.categorical_features) - set(self.excluded_col)
-        for col in col_cat:
-            freq_val = data.select(pl.col(col).drop_nulls().mode().first()).collect().item()
-            data = data.with_columns(pl.col(col).fill_null(freq_val))
-        
+            data = data.with_columns(col_num.fill_null(self.num_fill_null))
+    
+    
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
         col_str = cs.string()-cs.by_name(self.excluded_col) 
-        if self.time:
-            df = data.sort(self.time).collect().to_dummies(col_str)
+        data = data.collect()
+        
+        for col in self.rare_labels.keys():
+            data = data.with_columns(
+                pl.when(pl.col(col).is_in(self.rare_labels[col]))
+                .then(pl.lit("other"))
+                .otherwise(pl.col(col))
+                .alias(col)
+            )
+        
+        if self.nbins > 0:
+            # KBinsDiscretizer applied to numerical features
+            data = data.with_columns(col_num.qcut(self.n_bins, labels=self.nbins_labels))
         else:
-            df = data.collect().to_dummies(col_str)
+            match self.scaling:
+                case "normalize":
+                    # Normalization of numerical features
+                    for col in data.select(col_num).columns:
+                        col_min = self.numerical_parameters[0][col].item()
+                        col_max = self.numerical_parameters[1][col].item()
+                        data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
+                case "standardize":
+                    # Standardization of numerical features
+                    for col in data.select(col_num).columns:
+                        col_mean = self.numerical_parameters[0][col].item()
+                        col_std  = self.numerical_parameters[1][col].item()
+                        data = data.with_columns((pl.col(col) - col_mean) /  col_std)    
+                case "quantile":
+                    # Quantile transformation of numerical features
+                    num_data = transform_with_quantiles(data.select(col_num), 
+                                                        self.numerical_parameters, 
+                                                        output_distribution="normal")    
+                    for col in num_data.columns:
+                        data = data.with_columns(num_data[col].alias(col))
+
+        if self.time:
+            df = data.sort(self.time).to_dummies(col_str)
+        else:
+            df = data.to_dummies(col_str)
+
+
+        if self.unseen_labels == 'error' and len([i for i in df.columns if i not in self.one_hot_encoded_columns]):
+            raise ValueError("New data contains unseen labels")
+        
+        not_in_new_data = [i for i in self.one_hot_encoded_columns if i not in data.columns]
+        for i in not_in_new_data:
+            df = df.with_columns(pl.lit(0).alias(i))
+        df = df[list(self.numerical_features)+
+                    self.one_hot_encoded_columns+
+                    list(self.boolean_features)]
 
         if self.data_was_pd:
-            df = df.to_pandas()
-
+            df = df.to_pandas()        
         return df
 
     def extract_ts_features(
@@ -388,27 +477,6 @@ class Preprocessor:
         """
         return self.categorical_features
     
-    def get_discarded_features_reason(self) -> None:
-        """
-        Print the discarded columns and the reason why they were discarded
-        """
-        try:
-            getattr(self,"discarded_features")
-            print('1. The following columns are discarded because all vales are equal (the value is reported next to the feature):')
-            for key,value in self.discarded_features.items():
-                if value =='All vales are equal':
-                    print("    ", key, ":", self.single_value_columns[key])
-            print('\n\n2. The following columns are discarded because more than 50% of the values is null or empty:')
-            for key,value in self.discarded_features.items():
-                if value =='More than 50% of the values is null or empty':
-                    print("    ", key)
-            print('\n\n3. The following columns are discarded because more than discarding_threshold % of values are different from each other:')
-            for key,value in self.discarded_features.items():
-                if value =='More than discarding_threshold % of values are different from each other':
-                    print("    ", key)
-        except AttributeError:
-            print("AttributeError\nThe preprocessor has no attribute 'discarded_features'.\nMake sure you called the method 'preprocessor.transform(your_LazyFrame)' or you set the argument 'get_discarded_info=True' when initializing the Prprocessor to assess the discarded features.")
-
     def help(self):
         """
         Print some guidelines and working principles of the Preprocessor

@@ -15,34 +15,33 @@ It is possible to input the Preprocessor a `Pandas.DataFrame` or a `Polars.LazyF
 ## Preprocessing customization
 A bunch of options are available to customize the preprocessing. 
 
-1. The `Preprocessor` class features the following input arguments, besides the input dataset:
-    - `discarding_threshold: float (default = 0.9)`
+The `Preprocessor` class features the following input arguments, besides the input dataset:
+   - `discarding_threshold: float (default = 0.9)`
       
         Float number between 0 and 1 to set the threshold for discarding categorical features. 
         If more than discarding_threshold * 100 % of values in a categorical feature are different from each other, then the column is discarded. 
         For example, if discarding_threshold=0.9, a column will be discarded if more than 90% of its values are unique.
     
-    - `get_discarded_info: bool (defatult = False)`
+   - `get_discarded_info: bool (defatult = False)`
         
         When set to 'True', the preprocessor will feature the methods preprocessor.get_discarded_features_reason, which provides information on which columns were discarded and the reason why, and preprocessor.get_single_valued_columns, which provides the values of the single-valued discarded columns.
         Note that setting get_discarded_info=True will considerably slow down the processing operation!
         The list of discarded columns will be available even if get_discarded_info=False, so consider setting this flag to True only if you need to know why a column was discarded or, if it contained just one value, what that value was.
       
-    - `excluded_col: (default = [])`
+   - `excluded_col: (default = [])`
       
         List containing the names of the columns to be excluded from processing. These columns will be returned in the final dataframe withouth being manipulated. 
-    - `time: (default = None)`
+   - `time: (default = None)`
   
         String name of the time column by which to sort the dataframe in case of time series.
       
-2. The mothod `transform` of the class Preprocessor features the following input arguments, besides the input dataset:
-    - `scaling: (default="normalize")`
-      
+   - `scaling: (default="normalize")`
+    
         Specifies the scaling operation to perform on numerical features.
         - "normalize"   : applies normalization to numerical features
         - "standardize" : applies standardization to numerical features
     
-    - `num_fill_null: (default = "mean")`
+   - `num_fill_null: (default = "mean")`
     
         Specifies the value to fill null values with or the strategy for filling null values in numerical features.
         - value      : fills null values with the specified value  
@@ -54,7 +53,7 @@ A bunch of options are available to customize the preprocessing.
         - "zero"     : fills null values with zeros
         - "one"      : fills null values with ones
 
-    - `n_bins: (default = 0)`
+   - `n_bins: (default = 0)`
   
         Integer number that determines the number of bins into which numerical features are discretized. When set to 0, the preprocessing step defaults to the scaling method specified in the 'scaling' atgument instead of discretization.
       
@@ -117,17 +116,21 @@ df
 
 ### Customization example
 In the following example, when the Preprocessor is initialized:
-1. the discarding threshold is lowered from 90% to 80% (a column will be discarded if more than 80% of its values are unique)
-2. the discarding featrues informations are stored in the `preprocessor` instance
-3. the column "cha" is excluded from the preprocessing and is preserved unchanged.
+1. The discarding threshold is lowered from 90% to 80% (a column will be discarded if more than 80% of its values are unique).
+2. The discarding featrues informations are stored in the `preprocessor` instance.
+3. The column "boo" is excluded from the preprocessing and is preserved unchanged.
+4. The scaling method of the numerical features chosen is standardization
+5. The fill null strategy for numerical features is "forward".
 
-When the method `transform()` is called
-1. the scaling method of the numerical features chosen is standardization
-2.  the fill null strategy for numerical features is "forward".
-3.  
 ```python
-preprocessor    = Preprocessor(q, get_discarded_info=True, discarding_threshold = 0.8, excluded_col = ["boo"])
-df = preprocessor.transform(q, scaling = "standardize", num_fill_null = "forward")
+preprocessor    = Preprocessor(q, 
+                               get_discarded_info=True, 
+                               discarding_threshold = 0.8, 
+                               excluded_col = ["boo"], 
+                               scaling = "standardize", 
+                               num_fill_null = "forward"
+                            )
+df = preprocessor.transform(q)
 df
 ```
 <img src="https://github.com/Clearbox-AI/preprocessor/assets/152599516/ba61531d-a462-4d58-847a-47127d6050fd" alt="image" width="52%" height="auto">
