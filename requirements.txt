@@ -1,9 +1,7 @@
 numpy
 pandas
 scikit-learn
-<<<<<<< HEAD
-=======
->>>>>>> develop
+scipy==1.14
 polars<=1.17.1
 tsfresh==0.20.3
 sphinx_rtd_theme
