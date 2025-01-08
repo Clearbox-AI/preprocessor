@@ -9,8 +9,15 @@ This repository contains the continuation of the work presented in our series of
 
 The new version of Preprocessor exploits Polars library's features to achieve blazing fast tabular data manipulation.
 
-It is possible to input the Preprocessor a `Pandas.DataFrame` or a `Polars.LazyFrame`.
+It is possible to input the Preprocessor a `Pandas.DataFrame`, a `Polars.DataFrame` or a `Polars.LazyFrame`.
 
+## Installation
+
+You can install the preprocessor by running the following command:
+
+```shell
+$ pip install clearbox-preprocessor
+```
 
 ## Preprocessing customization
 A bunch of options are available to customize the preprocessing. 
@@ -69,15 +76,6 @@ This method takes as input:
 - the name of the id column to group by
   
 It returns the most relevant features selected among a wide range of features.
-
-
-## Installation
-
-You can install the preprocessor by running the following command:
-
-```shell
-$ pip install clearbox-preprocessor
-```
 
 ## Usage
 You can start using the Preprocessor by importing it and creating a `Pandas.DataFrame` or a `Polars.LazyFrame`:
