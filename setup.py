@@ -7,7 +7,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="clearbox-preprocessor",  
-    version="0.9.11",  
+    version="0.9.12",  
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
     description="A polars based preprocessor for ML datasets",
@@ -19,11 +19,14 @@ setup(
     ],
     python_requires='>=3.9',
     install_requires=[
-                    'numpy<2.0.0',
+                    'numpy',
                     'pandas',
                     'scikit-learn',
-                    'polars<1.0.0',
-                    'tsfresh'],
+                    'polars<=1.17.1',
+                    'tsfresh==0.20.3',
+                    'sphinx_rtd_theme',
+                    'myst_parser',
+                    'sphinxemoji'],
     extras_require={
         "dev": [
             "check-manifest",
