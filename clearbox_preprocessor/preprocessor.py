@@ -9,6 +9,7 @@ from tsfresh import extract_relevant_features
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
 import bisect
 from clearbox_preprocessor.utils.numerical_transformers import calculate_quantile_mappings, transform_with_quantiles
+from clearbox_preprocessor.utils.extract_time_features import features_extractor
 import warnings
 
 
@@ -18,8 +19,9 @@ class Preprocessor:
     temporal_features    : Tuple[str]
     discarded_features   : Union[List[str], Dict[str, str]]
     single_value_columns : Dict[str, str]
-    FillNullStrategy     : TypeAlias = Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"]
-    Scaling              : TypeAlias = Literal["normalize", "standardize", "quantile"]
+    fill_null_strategy   : TypeAlias = Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"]
+    scaling              : TypeAlias = Literal["normalize", "standardize", "quantile"]
+
     """
     A class for preprocessing datasets, including feature selection, handling missing values, scaling, 
     and time-series feature extraction.
@@ -47,7 +49,7 @@ class Preprocessor:
             missing_values_threshold: float = 0.999,
             n_bins: int = 0,
             scaling: str = "normalize", 
-            num_fill_null : FillNullStrategy = "mean",
+            num_fill_null : fill_null_strategy = "mean",
             cat_labels_threshold: float = 0.01,
             unseen_labels = 'ignore',
             target_columns = None,
@@ -88,7 +90,7 @@ class Preprocessor:
             - "quantile" : Transforms numerical features using quantiles information.
 
 
-        num_fill_null : FillNullStrategy or str, default="mean"
+        num_fill_null : fill_null_strategy or str, default="mean"
             Strategy or value used to fill null values in numerical features:
             - "mean"        : Fills null values with the mean of the column.
             - "interpolate" : Fills null values using interpolation.
