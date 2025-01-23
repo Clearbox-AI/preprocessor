@@ -7,3 +7,4 @@ tsfresh==0.20.3
 sphinx_rtd_theme
 myst_parser
 sphinxemoji
+functime
