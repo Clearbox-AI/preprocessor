@@ -186,7 +186,10 @@ class Preprocessor:
                 .otherwise(pl.col(col))
                 .alias(col)
             )
-        self.one_hot_encoded_columns = data.select(col_str).collect().to_dummies().columns
+        self.one_hot_encoded_columns = []
+        cat_data = data.select(col_str).collect()
+        if cat_data.shape[1] > 0:
+            self.one_hot_encoded_columns = cat_data.to_dummies().columns
         
         if self.nbins > 0:
             # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
