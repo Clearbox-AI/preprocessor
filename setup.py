@@ -5,9 +5,13 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
+# Parse the requirements.txt file to get a list of dependencies
+with open("requirements.txt") as f:
+    requirements = f.read().splitlines()
+
 setup(
     name="clearbox-preprocessor",  
-    version="0.9.7",  
+    version="0.9.13",  
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
     description="A polars based preprocessor for ML datasets",
@@ -18,12 +22,7 @@ setup(
     classifiers=[
     ],
     python_requires='>=3.9',
-    install_requires=[
-                    'numpy<2.0.0',
-                    'pandas',
-                    'scikit-learn',
-                    'polars<1.0.0',
-                    'tsfresh'],
+    install_requires=requirements,
     extras_require={
         "dev": [
             "check-manifest",

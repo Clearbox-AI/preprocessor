@@ -90,7 +90,7 @@ class Preprocessor:
             - "quantile" : Transforms numerical features using quantiles information.
 
 
-        num_fill_null : fill_null_strategy or str, default="mean"
+        num_fill_null : FillNullStrategy or str, default="mean"
             Strategy or value used to fill null values in numerical features:
             - "mean"        : Fills null values with the mean of the column.
             - "interpolate" : Fills null values using interpolation.
@@ -110,6 +110,8 @@ class Preprocessor:
         unseen_labels : str, default="ignore"
             - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
             - "error"         : Raise an error if new data contains labels unseen during fit.
+
+        target_column : str, default=None
 
         Raises
         ------
@@ -396,10 +398,10 @@ class Preprocessor:
 
     def extract_ts_features(
             self,
-            data: pl.LazyFrame | pd.DataFrame,
-            y: pl.Series | pd.Series,
-            time: str = None,
-            column_id:str = None,
+            data:      pl.LazyFrame | pd.DataFrame,
+            y:         pl.Series | pd.Series = None,
+            time:      str = None,
+            column_id: str = None,
         ) -> pd.DataFrame:
         """
         Extract relevant time-series features from the provided data.
@@ -438,6 +440,7 @@ class Preprocessor:
         to extract features from the time-series data.
         - The method stores the filtered features in `self.features_filtered` for further use.
         """
+        # Transform input dataframe into Pandas.DataFrame
         if isinstance(data, pl.LazyFrame):
             data_pd = data.collect().to_pandas()
         elif isinstance(data, pl.DataFrame):
@@ -478,41 +481,3 @@ class Preprocessor:
         Return the list of categorical features.
         """
         return self.categorical_features
-    
-    def help(self):
-        """
-        Print some guidelines and working principles of the Preprocessor
-        """
-        print("""       Initializze the Preprocessor as: \n
-            preprocessor = Preprocessor(your_dataframe, discarding_threshold: float = 0.9, get_discarded_info = False)\n
-        'your_dataframe' can be a Polars LazyFrame or a Pandas DataFrame.
-        Below are listed all the possible values for the arguments of the Preprocessor():\n
-        'discarding_threshold': (default = 0.9)
-            Float number between 0 and 1 to set the threshold for discarding categorical features. 
-            If more than discarding_threshold * 100 % of values in a categorical feature are different from each other, then the column is discarded. 
-            For example, if discarding_threshold=0.9, a column will be discarded if more than 90% of its values are unique.\n
-        'get_discarded_info': (defatult = False)
-            When set to 'True', the preprocessor will feature the methods preprocessor.get_discarded_features_reason, which provides information on which columns were discarded and the reason why.
-            Note that setting get_discarded_info=True will considerably slow down the processing operation!
-            The list of discarded columns will be available even if get_discarded_info=False, so consider setting this flag to True only if you need to know why a column was discarded or, if it contained just one value, what that value was.\n\n
-        After having initialized the preprocessor, call the following method to start the processing: \n
-            preprocessor.transform(your_dataframe, num_fill_null_strat="mean", n_bins : int  = 0)\n
-        Below are listed all the possible values for the arguments of the method .transform():\n
-        'scaling': (default="normalize")
-            Specifies the scaling operation to perform on numerical features.
-            - "normalize"   : applies normalization to numerical features
-            - "standardize" : applies standardization to numerical features\n
-        'num_fill_null': (default = "mean")
-            Specifies the value to fill null values with or the strategy for filling null values in numerical features.
-            - value      : fills null values with the specified value  
-            - "mean"     : fills null values with the average of the column
-            - "forward"  : fills null values with the previous non-null value in the column
-            - "backward" : fills null values with the following non-null value in the column
-            - "min"      : fills null values with the minimum value of the column
-            - "max"      : fills null values with the maximum value of the column
-            - "zero"     : fills null values with zeros
-            - "one"      : fills null values with ones
-        'n_bins': (default = 0)
-            Integer number that determines the number of bins to which numerical features are discretized. When set to 0, the preprocessing step defaults to the scaling method specified in the 'scaling' atgument instead of discretization.
-            Note that if n_bins is different than 0, discretization will take place instead of scaling, regardless of whether the 'scaling' argument is specified.
-            """)

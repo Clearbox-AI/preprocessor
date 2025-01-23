@@ -54,8 +54,10 @@ html_theme_options = {
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_logo = "img/cb_white_logo_compact.png"
 html_static_path = ['_static', 'img']
+html_logo = "img/cb_white_logo_compact.png"
+html_favicon = "img/favicon.ico"
+
 
 master_doc = 'index'  # Ensure this points to your main document
 
