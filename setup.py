@@ -11,7 +11,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="clearbox-preprocessor",  
-    version="0.9.13",  
+    version="0.9.14",  
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
     description="A polars based preprocessor for ML datasets",
@@ -21,12 +21,12 @@ setup(
     packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     classifiers=[
     ],
-    python_requires='>=3.9',
+    python_requires='>3.9',
     install_requires=requirements,
     extras_require={
         "dev": [
             "check-manifest",
-            "pytest>=3.9",
+            "pytest>3.9",
         ],
         "test": [
             "coverage",
