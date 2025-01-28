@@ -9,7 +9,7 @@ from tsfresh import extract_relevant_features
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
 import bisect
 from clearbox_preprocessor.utils.numerical_transformers import calculate_quantile_mappings, transform_with_quantiles
-from clearbox_preprocessor.utils.extract_time_features import features_extractor
+#from clearbox_preprocessor.utils.extract_time_features import features_extractor
 import warnings
 
 
