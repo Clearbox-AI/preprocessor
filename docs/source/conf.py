@@ -50,7 +50,9 @@ html_theme_options = {
     "display_version": True,
     "style_nav_header_background": "#483a8f",
 }
-
+html_css_files = [
+    'style.css',
+]
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
