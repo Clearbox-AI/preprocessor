@@ -20,7 +20,7 @@ class Preprocessor:
     discarded_features   : Union[List[str], Dict[str, str]]
     single_value_columns : Dict[str, str]
     fill_null_strategy   : TypeAlias = Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"]
-    scaling_method         : TypeAlias = Literal["normalize", "standardize", "quantile"]
+    scaling              : TypeAlias = Literal["none", "normalize", "standardize", "quantile"]
 
     """
     A class for preprocessing datasets, including feature selection, handling missing values, scaling, 
@@ -48,8 +48,7 @@ class Preprocessor:
             time: str = None,
             missing_values_threshold: float = 0.999,
             n_bins: int = 0,
-            scaling: bool = False,
-            scaling_method: str = "normalize", 
+            scaling: str = "none", 
             num_fill_null : fill_null_strategy = "mean",
             cat_labels_threshold: float = 0.01,
             unseen_labels = 'ignore',
@@ -84,14 +83,12 @@ class Preprocessor:
         time : str, optional, default=None
             The name of the time column to sort the DataFrame in case of time series data.
 
-        scaling : bool, defalt=False
-            If True, the scaling_method is applied to numerical features. If False, no scaling is applied.
-        
-       scaling_method : str, default="normalize"
+       scaling : str, default="normalize"
             The method used to scale numerical features:
+            - "none"        : No scaling is applied   
             - "normalize"   : Normalizes numerical features to the [0, 1] range.
             - "standardize" : Standardizes numerical features to have a mean of 0 and a standard deviation of 1.
-            - "quantile" : Transforms numerical features using quantiles information.
+            - "quantile"    : Transforms numerical features using quantiles information.
 
 
         num_fill_null : FillNullStrategy or str, default="mean"
@@ -155,7 +152,6 @@ class Preprocessor:
         self.numerical_parameters = None
         self.num_fill_null = num_fill_null
         self.scaling = scaling
-        self.scaling_method = scaling_method
         col_num = cs.numeric()-cs.by_name(self.excluded_col) 
         col_str = cs.string()-cs.by_name(self.excluded_col) 
         data_shape = data.select(pl.len()).collect()['len'][0]
@@ -200,8 +196,10 @@ class Preprocessor:
             # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
             # This is useful for transforming continuous data into categorical data, which can be beneficial for certain types of analysis or models.
             self.nbins_labels=list(map(str, list(range(0, n_bins))))     
-        elif scaling:
-            match scaling_method:
+        else:
+            match scaling:
+                case "none":
+                    pass
                 case "normalize":
                     # Normalization parameters of numerical features
                     self.numerical_parameters = [data.select(col_num).min().collect(), 
@@ -214,7 +212,7 @@ class Preprocessor:
                     quantile_maps = calculate_quantile_mappings(data.select(col_num).collect())      
                     self.numerical_parameters = quantile_maps
                 case _:
-                    raise ValueError(f"Unknown scaling method: {scaling_method}")
+                    raise ValueError(f"Unknown scaling method: {scaling}")
 
 
     def _infer_feature_types(self, data: pl.LazyFrame) -> None:
@@ -364,6 +362,8 @@ class Preprocessor:
             data = data.with_columns(col_num.qcut(self.n_bins, labels=self.nbins_labels))
         else:
             match self.scaling:
+                case "none":
+                    pass 
                 case "normalize":
                     # Normalization of numerical features
                     for col in data.select(col_num).columns:
