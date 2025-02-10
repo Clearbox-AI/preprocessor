@@ -7,10 +7,10 @@ import polars.selectors as cs
 from tsfresh import extract_relevant_features
 
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
-import bisect
-from clearbox_preprocessor.utils.numerical_transformers import calculate_quantile_mappings, transform_with_quantiles
-#from clearbox_preprocessor.utils.extract_time_features import features_extractor
 import warnings
+
+from clearbox_preprocessor.utils.numerical_transformer import NumericalTransformer, calculate_quantile_mappings, transform_with_quantiles, inverse_transform_with_quantiles
+from clearbox_preprocessor.utils.categorical_transformer import CategoricalTransformer
 
 
 class Preprocessor:
@@ -89,6 +89,7 @@ class Preprocessor:
             - "normalize"   : Normalizes numerical features to the [0, 1] range.
             - "standardize" : Standardizes numerical features to have a mean of 0 and a standard deviation of 1.
             - "quantile"    : Transforms numerical features using quantiles information.
+            - "kbins"       : Converts continuous numerical data into discrete bins. The number of bins is defined by the parameter n_bin
 
 
         num_fill_null : FillNullStrategy or str, default="mean"
@@ -104,9 +105,9 @@ class Preprocessor:
             - value         : Fills null values with the specified value.
 
         n_bins : int, default=0
-            Number of bins to discretize numerical features. If set to a value greater than 0,
+            Number of bins to discretize numerical features. If set to a value greater than 0 and if scaling=="kbins",
             numerical features are discretized into the specified number of bins using quantile-based
-            binning. If 0, the scaling method specified in `scaling` is applied instead.
+            binning.
 
         unseen_labels : str, default="ignore"
             - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
@@ -147,8 +148,8 @@ class Preprocessor:
 
         self._infer_feature_types(data)
         self._feature_selection(data)
-        self.nbins_labels = None
-        self.nbins = n_bins
+        self.n_bins_labels = None
+        self.n_bins = n_bins
         self.numerical_parameters = None
         self.num_fill_null = num_fill_null
         self.scaling = scaling
@@ -192,27 +193,30 @@ class Preprocessor:
         if cat_data.shape[1] > 0:
             self.one_hot_encoded_columns = cat_data.to_dummies().columns
         
-        if self.nbins > 0:
-            # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
-            # This is useful for transforming continuous data into categorical data, which can be beneficial for certain types of analysis or models.
-            self.nbins_labels=list(map(str, list(range(0, n_bins))))     
-        else:
-            match scaling:
-                case "none":
-                    pass
-                case "normalize":
-                    # Normalization parameters of numerical features
-                    self.numerical_parameters = [data.select(col_num).min().collect(), 
-                                                 data.select(col_num).max().collect()]
-                case "standardize":
-                    # Standardization parameters of numerical features
-                    self.numerical_parameters = [data.select(col_num).mean().collect(), 
-                                                 data.select(col_num).std().collect()] 
-                case "quantile":
-                    quantile_maps = calculate_quantile_mappings(data.select(col_num).collect())      
-                    self.numerical_parameters = quantile_maps
-                case _:
-                    raise ValueError(f"Unknown scaling method: {scaling}")
+        self.numerical_transformer   = NumericalTransformer(data, self)
+        self.categorical_transformer = CategoricalTransformer(data, self)
+
+        # if self.n_bins > 0:
+        #     # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
+        #     # This is useful for transforming continuous data into categorical data, which can be beneficial for certain types of analysis or models.
+        #     self.n_bins_labels=list(map(str, list(range(0, n_bins))))     
+        # else:
+        #     match scaling:
+        #         case "none":
+        #             pass
+        #         case "normalize":
+        #             # Normalization parameters of numerical features
+        #             self.numerical_parameters = [data.select(col_num).min().collect(), 
+        #                                          data.select(col_num).max().collect()]
+        #         case "standardize":
+        #             # Standardization parameters of numerical features
+        #             self.numerical_parameters = [data.select(col_num).mean().collect(), 
+        #                                          data.select(col_num).std().collect()] 
+        #         case "quantile":
+        #             quantile_maps = calculate_quantile_mappings(data.select(col_num).collect())      
+        #             self.numerical_parameters = quantile_maps
+        #         case _:
+        #             raise ValueError(f"Unknown scaling method: {scaling}")
 
 
     def _infer_feature_types(self, data: pl.LazyFrame) -> None:
@@ -307,7 +311,7 @@ class Preprocessor:
         - Numerical features can be normalized, standardized, or discretized based on the specified parameters.
         - Temporal features are filled using interpolation and reordered to the beginning of the dataset.
         """
-        # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
+        # Transform data from Pandas.DataFrame or Polars.DataFrame to Polars.LazyFrame
         if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
             data = pl.from_pandas(data).lazy()
         elif isinstance(data, pl.DataFrame) and self.data_was_pd == False:
@@ -327,13 +331,13 @@ class Preprocessor:
         else:
             data = data.drop(self.discarded_features)
 
-    # Temporal features processing
-        # Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame 
+        # Temporal features processing
+        #   Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame 
         col = cs.temporal()-cs.by_name(self.excluded_col)   
         data = data.select(col.interpolate(), cs.all()-col)
 
-    # Numerical features processing
-        # Fill Null values with the selcted strategy or value (default: "mean")
+        # Numerical features processing
+        #   Fill Null values with the selcted strategy or value (default: "mean")
         col_num = cs.numeric()-cs.by_name(self.excluded_col) 
         if isinstance(self.num_fill_null, str):
             if self.num_fill_null == "interpolate":
@@ -343,9 +347,37 @@ class Preprocessor:
         else:
             data = data.with_columns(col_num.fill_null(self.num_fill_null))
     
-    
-        # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
-        # The Dataframe is sorted according to "time" column if present
+        # if self.n_bins > 0:
+        #     # KBinsDiscretizer applied to numerical features
+        #     data = data.with_columns(col_num.qcut(self.n_bins, labels=self.n_bins_labels))
+        # else:
+        #     match self.scaling:
+        #         case "none":
+        #             pass 
+        #         case "normalize":
+        #             # Normalization of numerical features
+        #             for col in data.select(col_num).columns:
+        #                 col_min = self.numerical_parameters[0][col].item()
+        #                 col_max = self.numerical_parameters[1][col].item()
+        #                 data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
+        #         case "standardize":
+        #             # Standardization of numerical features
+        #             for col in data.select(col_num).columns:
+        #                 col_mean = self.numerical_parameters[0][col].item()
+        #                 col_std  = self.numerical_parameters[1][col].item()
+        #                 data = data.with_columns((pl.col(col) - col_mean) /  col_std)    
+        #         case "quantile":
+        #             # Quantile transformation of numerical features
+        #             num_data = transform_with_quantiles(data.select(col_num), 
+        #                                                 self.numerical_parameters, 
+        #                                                 output_distribution="normal")    
+        #             for col in num_data.columns:
+        #                 data = data.with_columns(num_data[col].alias(col))
+        data = self.numerical_transformer.transform(data)
+
+        # Categorical feature processing
+        #   OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
+        #   The Dataframe is sorted according to "time" column if present
         col_str = cs.string()-cs.by_name(self.excluded_col) 
         data = data.collect()
         
@@ -356,38 +388,11 @@ class Preprocessor:
                 .otherwise(pl.col(col))
                 .alias(col)
             )
-        
-        if self.nbins > 0:
-            # KBinsDiscretizer applied to numerical features
-            data = data.with_columns(col_num.qcut(self.n_bins, labels=self.nbins_labels))
-        else:
-            match self.scaling:
-                case "none":
-                    pass 
-                case "normalize":
-                    # Normalization of numerical features
-                    for col in data.select(col_num).columns:
-                        col_min = self.numerical_parameters[0][col].item()
-                        col_max = self.numerical_parameters[1][col].item()
-                        data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
-                case "standardize":
-                    # Standardization of numerical features
-                    for col in data.select(col_num).columns:
-                        col_mean = self.numerical_parameters[0][col].item()
-                        col_std  = self.numerical_parameters[1][col].item()
-                        data = data.with_columns((pl.col(col) - col_mean) /  col_std)    
-                case "quantile":
-                    # Quantile transformation of numerical features
-                    num_data = transform_with_quantiles(data.select(col_num), 
-                                                        self.numerical_parameters, 
-                                                        output_distribution="normal")    
-                    for col in num_data.columns:
-                        data = data.with_columns(num_data[col].alias(col))
-
-        if self.time:
-            df = data.sort(self.time).to_dummies(col_str)
-        else:
-            df = data.to_dummies(col_str)
+        # if self.time:
+        #     df = data.sort(self.time).to_dummies(col_str)
+        # else:
+        #     df = data.to_dummies(col_str)
+        df = self.categorical_transformer.transform(data, self.time)
 
 
         if self.unseen_labels == 'error' and len([i for i in df.columns if i not in self.one_hot_encoded_columns]):
@@ -404,6 +409,60 @@ class Preprocessor:
             df = df.to_pandas()        
         return df
 
+
+    def reverse_transform(
+            self,
+            data: pl.LazyFrame | pl.DataFrame | pd.DataFrame,
+    ) -> pl.DataFrame:
+        """
+        """
+        # Transform data from Pandas.DataFrame or Polars.LazyFrame to Polars.DataFrame
+        if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
+            data = pl.from_pandas(data)
+        elif isinstance(data, pl.DataFrame) and self.data_was_pd == False:
+            pass
+        elif isinstance(data, pl.LazyFrame) and self.data_was_pd == False:
+            data = data.collect()
+        else:
+            sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
+
+        # cat_col  = self.categorical_features
+        # num_col  = self.numerical_features
+        # # bool_col = self.boolean_features
+        # time_col = self.temporal_features
+        
+        # # Numerical features
+        # match self.scaling:
+        #     case "none":
+        #         pass
+        #     case "normalize":
+        #         # Inverse normalization
+        #         for col in data.select(num_col).columns:
+        #             col_min = self.numerical_parameters[0][col].item()
+        #             col_max = self.numerical_parameters[1][col].item()
+        #             data = data.with_columns(pl.col(col) * (col_max - col_min) + col_min)
+        #     case "standardize":
+        #         # Inverse standardization
+        #         for col in data.select(col_num).columns:
+        #             col_mean = self.numerical_parameters[0][col].item()
+        #             col_std  = self.numerical_parameters[1][col].item()
+        #             data = data.with_columns(pl.col(col) *  col_std + col_mean) 
+        #     case "quantile":
+        #         # Inverse quantile transformation
+        #         num_data = inverse_transform_with_quantiles(data.select(num_col), 
+        #                                                     self.numerical_parameters, 
+        #                                                     input_distribution="normal")    
+        #         for col in num_data.columns:
+        #             data = data.with_columns(num_data[col].alias(col))
+        #     case "kbins":
+        #         pass
+        data = self.numerical_transformer.inverse_transform(data)
+
+        # Categorical features
+        data = self.categorical_transformer.inverse_transform(data)
+
+        return data
+    
     def extract_ts_features(
             self,
             data:      pl.LazyFrame | pd.DataFrame,
