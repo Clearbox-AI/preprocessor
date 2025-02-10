@@ -9,8 +9,8 @@ from tsfresh import extract_relevant_features
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
 import warnings
 
-from clearbox_preprocessor.utils.numerical_transformer import NumericalTransformer, calculate_quantile_mappings, transform_with_quantiles, inverse_transform_with_quantiles
-from clearbox_preprocessor.utils.categorical_transformer import CategoricalTransformer
+from .utils.numerical_transformer import NumericalTransformer#, calculate_quantile_mappings, transform_with_quantiles, inverse_transform_with_quantiles
+from .utils.categorical_transformer import CategoricalTransformer
 
 
 class Preprocessor:
