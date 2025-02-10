@@ -27,6 +27,18 @@ jobs:
       run: |
         python setup.py sdist bdist_wheel
 
+    - name: Check package version
+      run: |
+        PACKAGE_NAME=$(python setup.py --name)
+        PACKAGE_VERSION=$(python setup.py --version)
+        if curl --silent -f https://pypi.org/project/${PACKAGE_NAME}/${PACKAGE_VERSION}/; then
+          echo "Version ${PACKAGE_VERSION} already exists on PyPI."
+          echo "already_published=true" >> $GITHUB_ENV
+        else
+          echo "Version ${PACKAGE_VERSION} does not exist on PyPI."
+          echo "already_published=false" >> $GITHUB_ENV
+        fi
+
     - name: Publish package to PyPI
       env:
         TWINE_USERNAME: __token__
