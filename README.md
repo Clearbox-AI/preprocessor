@@ -42,11 +42,12 @@ The `Preprocessor` class features the following input arguments, besides the inp
   
         String name of the time column by which to sort the dataframe in case of time series.
       
-   - `scaling: (default="normalize")`
+   - `scaling_method: (default="normalize")`
     
         Specifies the scaling operation to perform on numerical features.
         - "normalize"   : applies normalization to numerical features
         - "standardize" : applies standardization to numerical features
+        - "quantile" : Transforms numerical features using quantiles information
     
    - `num_fill_null: (default = "mean")`
     
@@ -117,7 +118,7 @@ In the following example, when the Preprocessor is initialized:
 1. The discarding threshold is lowered from 90% to 80% (a column will be discarded if more than 80% of its values are unique).
 2. The discarding featrues informations are stored in the `preprocessor` instance.
 3. The column "boo" is excluded from the preprocessing and is preserved unchanged.
-4. The scaling method of the numerical features chosen is standardization
+4. Scaling is enabled and the scaling method chosen for numerical features is standardization
 5. The fill null strategy for numerical features is "forward".
 
 ```python
@@ -125,7 +126,8 @@ preprocessor    = Preprocessor(q,
                                get_discarded_info=True, 
                                discarding_threshold = 0.8, 
                                excluded_col = ["boo"], 
-                               scaling = "standardize", 
+                               scaling = True,
+                               scaling_method = "standardize", 
                                num_fill_null = "forward"
                             )
 df = preprocessor.transform(q)
