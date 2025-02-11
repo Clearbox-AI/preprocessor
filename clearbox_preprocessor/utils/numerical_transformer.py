@@ -163,7 +163,7 @@ class NumericalTransformer:
         return data
 
 
-    def inverse_transform(self, data: pl.DataFrame):
+    def reverse_transform(self, data: pl.DataFrame):
         """
         """
         numerical_features  = self.numerical_features

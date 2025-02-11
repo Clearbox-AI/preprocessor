@@ -194,7 +194,7 @@ class Preprocessor:
             self.one_hot_encoded_columns = cat_data.to_dummies().columns
         
         self.numerical_transformer   = NumericalTransformer(data, self)
-        self.categorical_transformer = CategoricalTransformer(data, self)
+        self.categorical_transformer = CategoricalTransformer(self)
 
         # if self.n_bins > 0:
         #     # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
@@ -456,10 +456,10 @@ class Preprocessor:
         #             data = data.with_columns(num_data[col].alias(col))
         #     case "kbins":
         #         pass
-        data = self.numerical_transformer.inverse_transform(data)
+        data = self.numerical_transformer.reverse_transform(data)
 
         # Categorical features
-        data = self.categorical_transformer.inverse_transform(data)
+        data = self.categorical_transformer.reverse_transform(data)
 
         return data
     
