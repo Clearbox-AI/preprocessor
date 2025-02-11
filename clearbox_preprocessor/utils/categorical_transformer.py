@@ -52,7 +52,7 @@ class CategoricalTransformer:
         pl.DataFrame: The reversed original DataFrame.
         """
         # Drop all zeros columns
-        df = df.select([col for col in df.columns if not df[col].eq(0).all()])
+        df = df.select([col for col in df.columns if not (df[col].dtype in [pl.Int64, pl.Int32, pl.Float64, pl.Float32] and df[col].eq(0).all())])
         
         for col, categories in self.encoded_columns.items():        
             # Filter out columns that are missing from df.columns
