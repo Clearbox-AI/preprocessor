@@ -51,12 +51,15 @@ class CategoricalTransformer:
         Returns:
         pl.DataFrame: The reversed original DataFrame.
         """
-        for col, categories in self.encoded_columns.items():
+        # Drop all zeros columns
+        df = df.select([col for col in df.columns if not df[col].eq(0).all()])
+        
+        for col, categories in self.encoded_columns.items():        
             # Filter out columns that are missing from df.columns
             existing_categories = [cname for cname in categories if cname in df.columns]
 
+            # Reconstruct the original categorical column
             if existing_categories:
-                # Reconstruct the original categorical column
                 reconstructed_expr = pl.when(pl.fold(
                     acc=pl.lit(False),
                     function=lambda acc, x: acc | (x == 1),
