@@ -12,6 +12,7 @@ class CategoricalTransformer:
         self.encoded_columns = {}
 
         # Store encoded columns
+        df = df.collect()
         for col in df.select(self.categorical_features).columns:
             if df[col].dtype == pl.String:
                 one_hot = df[col].to_dummies()
@@ -46,7 +47,7 @@ class CategoricalTransformer:
                 name_mapping = {}
                 for enc_col in one_hot.columns:
                     name_mapping[enc_col]=enc_col.replace(col, f"{col}_enc", 1)
-                df.rename(name_mapping)
+                df = df.rename(name_mapping)
         return df
 
     def inverse_transform(

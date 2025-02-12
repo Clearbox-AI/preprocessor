@@ -188,16 +188,16 @@ class Preprocessor:
         Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, temporal or boolean. 
         """
         # Store the names of boolean columns into 'boolean_features'
-        self.boolean_features = tuple(set(cs.expand_selector(data, cs.boolean())) - set(cs.by_name(self.excluded_col)))
+        self.boolean_features = tuple(set(data.select(cs.boolean()).columns) - set(self.excluded_col))
 
         # Store the names of temporal columns into 'temporal_features'
-        self.temporal_features = tuple(set(cs.expand_selector(data, cs.temporal())) - set(cs.by_name(self.excluded_col)))
+        self.temporal_features = tuple(set(data.select(cs.temporal()).columns) - set(self.excluded_col))
 
         # Store the names of numerical columns into 'numerical_features'
-        self.numerical_features = tuple(set(cs.expand_selector(data, cs.numeric())) - set(cs.by_name(self.excluded_col)))
+        self.numerical_features = tuple(set(data.select(cs.numeric()).columns) - set(self.excluded_col))
 
         # Store the names of string columns into 'categorical_features'
-        self.categorical_features = tuple(set(cs.expand_selector(data, cs.string())) - set(cs.by_name(self.excluded_col)))
+        self.categorical_features = tuple(set(data.select(cs.string()).columns) - set(self.excluded_col))
 
     def _feature_selection(
             self,
