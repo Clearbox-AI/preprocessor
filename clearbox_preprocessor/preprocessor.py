@@ -349,59 +349,21 @@ class Preprocessor:
         else:
             data = data.with_columns(col_num.fill_null(self.num_fill_null))
     
-        # if self.n_bins > 0:
-        #     # KBinsDiscretizer applied to numerical features
-        #     data = data.with_columns(col_num.qcut(self.n_bins, labels=self.n_bins_labels))
-        # else:
-        #     match self.scaling:
-        #         case "none":
-        #             pass 
-        #         case "normalize":
-        #             # Normalization of numerical features
-        #             for col in data.select(col_num).columns:
-        #                 col_min = self.numerical_parameters[0][col].item()
-        #                 col_max = self.numerical_parameters[1][col].item()
-        #                 data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
-        #         case "standardize":
-        #             # Standardization of numerical features
-        #             for col in data.select(col_num).columns:
-        #                 col_mean = self.numerical_parameters[0][col].item()
-        #                 col_std  = self.numerical_parameters[1][col].item()
-        #                 data = data.with_columns((pl.col(col) - col_mean) /  col_std)    
-        #         case "quantile":
-        #             # Quantile transformation of numerical features
-        #             num_data = transform_with_quantiles(data.select(col_num), 
-        #                                                 self.numerical_parameters, 
-        #                                                 output_distribution="normal")    
-        #             for col in num_data.columns:
-        #                 data = data.with_columns(num_data[col].alias(col))
         data = self.numerical_transformer.transform(data)
 
         # Categorical feature processing
         #   Substitute rare lables with "other", OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         #   The Dataframe is sorted according to "time" column if present
         data = self._rare_labels(data)
-
-        # col_str = cs.string()-cs.by_name(self.excluded_col) 
-        # if self.time:
-        #     df = data.sort(self.time).to_dummies(col_str)
-        # else:
-        #     df = data.to_dummies(col_str)
-
         data = data.collect()
-        df = self.categorical_transformer.transform(data, self.time)
+        df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
 
-        ##############################################################################################################################
-        if self.unseen_labels == 'error' and len([i for i in df.columns if i not in self.categorical_transformer.encoded_columns.items()]):
-            raise ValueError("New data contains unseen labels")
+        # Raise an Error if a column in the new dataframe was not present in the encoded original datframe
+        if self.unseen_labels == 'error':
+            unseen = [col for col in new_encoded_columns if col not in self.categorical_transformer.original_encoded_columns]
+            if unseen:
+                warnings.warn(f"New data contains unseen categorical columns: {unseen}", UserWarning)
         
-        # not_in_new_data = [i for i in self.self.categorical_transformer.encoded_columns.items() if i not in data.columns]
-        # for i in not_in_new_data:
-        #     df = df.with_columns(pl.lit(0).alias(i))
-        # df = df[list(self.numerical_features)+
-        #             self.self.categorical_transformer.encoded_columns.items()+
-        #             list(self.boolean_features)]
-
         if self.data_was_pd:
             df = df.to_pandas()        
         return df
@@ -423,36 +385,6 @@ class Preprocessor:
         else:
             sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
 
-        # cat_col  = self.categorical_features
-        # num_col  = self.numerical_features
-        # # bool_col = self.boolean_features
-        # time_col = self.temporal_features
-        
-        # # Numerical features
-        # match self.scaling:
-        #     case "none":
-        #         pass
-        #     case "normalize":
-        #         # Inverse normalization
-        #         for col in data.select(num_col).columns:
-        #             col_min = self.numerical_parameters[0][col].item()
-        #             col_max = self.numerical_parameters[1][col].item()
-        #             data = data.with_columns(pl.col(col) * (col_max - col_min) + col_min)
-        #     case "standardize":
-        #         # Inverse standardization
-        #         for col in data.select(col_num).columns:
-        #             col_mean = self.numerical_parameters[0][col].item()
-        #             col_std  = self.numerical_parameters[1][col].item()
-        #             data = data.with_columns(pl.col(col) *  col_std + col_mean) 
-        #     case "quantile":
-        #         # Inverse quantile transformation
-        #         num_data = inverse_transform_with_quantiles(data.select(num_col), 
-        #                                                     self.numerical_parameters, 
-        #                                                     input_distribution="normal")    
-        #         for col in num_data.columns:
-        #             data = data.with_columns(num_data[col].alias(col))
-        #     case "kbins":
-        #         pass
         data = self.numerical_transformer.inverse_transform(data)
 
         # Categorical features
