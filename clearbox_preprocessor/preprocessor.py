@@ -140,61 +140,25 @@ class Preprocessor:
             raise ValueError("Invalid value for discarding_threshold")
     
         self.discarding_threshold   = discarding_threshold
-        self.discarded_info = []
+        self.discarded_info         = []
         self.missing_threshold      = missing_values_threshold
         self.get_discarded_info     = get_discarded_info
         self.excluded_col           = excluded_col
         self.time                   = time
+        self.n_bins_labels          = None
+        self.n_bins                 = n_bins
+        self.numerical_parameters   = None
+        self.num_fill_null          = num_fill_null
+        self.scaling                = scaling
+        self.cat_labels_threshold   = cat_labels_threshold
+        self.unseen_labels          = unseen_labels
 
         self._infer_feature_types(data)
         self._feature_selection(data)
-        self.n_bins_labels = None
-        self.n_bins = n_bins
-        self.numerical_parameters = None
-        self.num_fill_null = num_fill_null
-        self.scaling = scaling
-        col_num = cs.numeric()-cs.by_name(self.excluded_col) 
-        col_str = cs.string()-cs.by_name(self.excluded_col) 
-        data_shape = data.select(pl.len()).collect()['len'][0]
-        self.cat_labels_threshold = cat_labels_threshold
-        rare_labels_dict = {}
-        self.unseen_labels = unseen_labels
 
-        for col in data.select(cs.string()-cs.by_name(self.excluded_col)).columns:
-            freq = (
-                data
-                .group_by(col)
-                .agg(pl.len().alias("frequency"))
-            )
-
-            rare_labels = (
-                freq
-                .filter(pl.col("frequency") < self.cat_labels_threshold * data_shape)
-                .select(col)
-                .collect()  
-            )
-            if rare_labels.height > 0:
-                rare_values_list = rare_labels.get_column(col).to_list()
-            else:
-                rare_values_list = []
-            rare_labels_dict[col] = rare_values_list
-        
-        
-        self.rare_labels = rare_labels_dict
-        for col in self.rare_labels.keys():
-            data = data.with_columns(
-                pl.when(pl.col(col).is_in(self.rare_labels[col]))
-                .then(pl.lit("other"))
-                .otherwise(pl.col(col))
-                .alias(col)
-            )
-        self.one_hot_encoded_columns = []
-        cat_data = data.select(col_str).collect()
-        if cat_data.shape[1] > 0:
-            self.one_hot_encoded_columns = cat_data.to_dummies().columns
-        
+        # Initialization of NumericalTransformer and CategoricalTransformer
         self.numerical_transformer   = NumericalTransformer(data, self)
-        self.categorical_transformer = CategoricalTransformer(self)
+        self.categorical_transformer = CategoricalTransformer(data, self)
 
         # if self.n_bins > 0:
         #     # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
@@ -224,16 +188,16 @@ class Preprocessor:
         Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, temporal or boolean. 
         """
         # Store the names of boolean columns into 'boolean_features'
-        self.boolean_features = cs.expand_selector(data, cs.boolean())
+        self.boolean_features = cs.expand_selector(data, cs.boolean()) - cs.by_name(self.excluded_col)
 
         # Store the names of temporal columns into 'temporal_features'
-        self.temporal_features = cs.expand_selector(data, cs.temporal())
+        self.temporal_features = cs.expand_selector(data, cs.temporal()) - cs.by_name(self.excluded_col)
 
         # Store the names of numerical columns into 'numerical_features'
-        self.numerical_features = cs.expand_selector(data, cs.numeric())
+        self.numerical_features = cs.expand_selector(data, cs.numeric()) - cs.by_name(self.excluded_col)
 
         # Store the names of string columns into 'categorical_features'
-        self.categorical_features = cs.expand_selector(data, cs.string())
+        self.categorical_features = cs.expand_selector(data, cs.string()) - cs.by_name(self.excluded_col)
 
     def _feature_selection(
             self,
@@ -248,11 +212,11 @@ class Preprocessor:
                column is discarded.
         """
         # Replace empty strings ("") with None value
-        col = cs.string()-cs.by_name(self.excluded_col)
-        data = data.with_columns(col.replace("",None)) 
+        col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
+        data = data.with_columns(col_cat.replace({"":None, " ":None})) 
 
         col_all = cs.all()-cs.by_name(self.excluded_col)
-        col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
+        
         self.discarded_features = []
         # All feature types - Discard columns if more than missing_threshold% of values is null or all values are equal (only one value in the column)
         lf_ = data.select(pl.any_horizontal(col_all.drop_nulls().value_counts().count() == 1, 
@@ -277,6 +241,44 @@ class Preprocessor:
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
         self.temporal_features    = tuple(set(self.temporal_features)    - set(self.discarded_features))
+    
+    def _rare_labels(self, data):
+        """
+        Method to determine rare labels (labels with occurrency less than 'cat_labels_threshold') in categorical columns and replace them with "other".
+        """
+        data_shape = data.select(pl.len()).collect()['len'][0]
+        rare_labels_dict = {}
+
+        for col in self.categorical_features:
+            freq = (
+                data
+                .group_by(col)
+                .agg(pl.len().alias("frequency"))
+            )
+
+            rare_labels = (
+                freq
+                .filter(pl.col("frequency") < self.cat_labels_threshold * data_shape)
+                .select(col)
+                .collect()  
+            )
+            if rare_labels.height > 0:
+                rare_values_list = rare_labels.get_column(col).to_list()
+            else:
+                rare_values_list = []
+            rare_labels_dict[col] = rare_values_list
+        
+        
+        self.rare_labels = rare_labels_dict
+        for col in self.rare_labels.keys():
+            data = data.with_columns(
+                pl.when(pl.col(col).is_in(self.rare_labels[col]))
+                .then(pl.lit("other"))
+                .otherwise(pl.col(col))
+                .alias(col)
+            )
+
+        return data
     
     def transform(
             self, 
@@ -376,41 +378,36 @@ class Preprocessor:
         data = self.numerical_transformer.transform(data)
 
         # Categorical feature processing
-        #   OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
+        #   Substitute rare lables with "other", OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         #   The Dataframe is sorted according to "time" column if present
-        col_str = cs.string()-cs.by_name(self.excluded_col) 
-        data = data.collect()
-        
-        for col in self.rare_labels.keys():
-            data = data.with_columns(
-                pl.when(pl.col(col).is_in(self.rare_labels[col]))
-                .then(pl.lit("other"))
-                .otherwise(pl.col(col))
-                .alias(col)
-            )
+        data = self._rare_labels(data)
+
+        # col_str = cs.string()-cs.by_name(self.excluded_col) 
         # if self.time:
         #     df = data.sort(self.time).to_dummies(col_str)
         # else:
         #     df = data.to_dummies(col_str)
+
+        data = data.collect()
         df = self.categorical_transformer.transform(data, self.time)
 
-
-        if self.unseen_labels == 'error' and len([i for i in df.columns if i not in self.one_hot_encoded_columns]):
+        ##############################################################################################################################
+        if self.unseen_labels == 'error' and len([i for i in df.columns if i not in self.categorical_transformer.encoded_columns.items()]):
             raise ValueError("New data contains unseen labels")
         
-        not_in_new_data = [i for i in self.one_hot_encoded_columns if i not in data.columns]
-        for i in not_in_new_data:
-            df = df.with_columns(pl.lit(0).alias(i))
-        df = df[list(self.numerical_features)+
-                    self.one_hot_encoded_columns+
-                    list(self.boolean_features)]
+        # not_in_new_data = [i for i in self.self.categorical_transformer.encoded_columns.items() if i not in data.columns]
+        # for i in not_in_new_data:
+        #     df = df.with_columns(pl.lit(0).alias(i))
+        # df = df[list(self.numerical_features)+
+        #             self.self.categorical_transformer.encoded_columns.items()+
+        #             list(self.boolean_features)]
 
         if self.data_was_pd:
             df = df.to_pandas()        
         return df
 
 
-    def reverse_transform(
+    def inverse_transform(
             self,
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame,
     ) -> pl.DataFrame:
@@ -456,10 +453,10 @@ class Preprocessor:
         #             data = data.with_columns(num_data[col].alias(col))
         #     case "kbins":
         #         pass
-        data = self.numerical_transformer.reverse_transform(data)
+        data = self.numerical_transformer.inverse_transform(data)
 
         # Categorical features
-        data = self.categorical_transformer.reverse_transform(data)
+        data = self.categorical_transformer.inverse_transform(data)
 
         return data
     
