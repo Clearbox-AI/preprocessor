@@ -6,7 +6,7 @@ import polars.selectors as cs
 
 from tsfresh import extract_relevant_features
 
-from typing import List, Dict, Tuple, Union, TypeAlias, Literal
+from typing import List, Tuple, Literal
 import warnings
 
 from .utils.numerical_transformer import NumericalTransformer
@@ -79,15 +79,15 @@ class Preprocessor:
     Attributes
     ----------
     numerical_features : Tuple[str]
-        Names of the numerical features in the dataset.
+        Names of the numerical features in the dataset.  **(Hidden from TOC)**  :noindex:
     categorical_features : Tuple[str]
-        Names of the categorical features in the dataset.
+        Names of the categorical features in the dataset.  **(Hidden from TOC)**  :noindex:
     temporal_features : Tuple[str]
-        Names of the temporal features in the dataset.
+        Names of the temporal features in the dataset.  **(Hidden from TOC)**  :noindex:
     discarded_features : Union[List[str], Dict[str, str]]
-        Features that were discarded during preprocessing, along with reason they were discarded, if available.
+        Features that were discarded during preprocessing, along with reason they were discarded, if available.  **(Hidden from TOC)**  :noindex:
     single_value_columns : Dict[str, str]
-        Dictionary storing columns with only one unique value, along with the unique value.
+        Dictionary storing columns with only one unique value, along with the unique value.  **(Hidden from TOC)**  :noindex:
 
     Raises
     ------
