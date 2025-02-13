@@ -9,7 +9,7 @@ from tsfresh import extract_relevant_features
 from typing import List, Dict, Tuple, Union, TypeAlias, Literal
 import warnings
 
-from .utils.numerical_transformer import NumericalTransformer#, calculate_quantile_mappings, transform_with_quantiles, inverse_transform_with_quantiles
+from .utils.numerical_transformer import NumericalTransformer
 from .utils.categorical_transformer import CategoricalTransformer
 
 
@@ -23,8 +23,66 @@ class Preprocessor:
     scaling              : TypeAlias = Literal["none", "normalize", "standardize", "quantile"]
 
     """
-    A class for preprocessing datasets, including feature selection, handling missing values, scaling, 
+    A class for preprocessing datasets based on polars, including feature selection, handling missing values, scaling, 
     and time-series feature extraction.
+
+    Parameters
+    ----------
+    data : pl.LazyFrame or pl.DataFrame or pd.DataFrame
+        The dataset to be processed. It can be a Polars LazyFrame, Polars DataFrame, or Pandas DataFrame.
+
+    discarding_threshold : float, optional, default=0.9
+        A float value between 0 and 1 that sets the threshold for discarding categorical features.
+        If more than `discarding_threshold * 100%` of values in a categorical feature are unique,
+        the column is discarded. For instance, if `discarding_threshold=0.9`, a column will be
+        discarded if more than 90% of its values are unique.
+
+    get_discarded_info : bool, optional, default=False
+        If set to `True`, the preprocessor will feature the method `get_discarded_features_reason`,
+        which provides information on which columns were discarded and the reason for discarding.
+        Note that enabling this option may significantly slow down the processing operation.
+        The list of discarded columns is available even when `get_discarded_info=False`, so consider
+        setting this flag to `True` only if you need to know why a column was discarded or, in the case
+        of columns containing only one unique value, what that value was.
+
+    excluded_col : List, optional, default=[]
+        A list of column names to be excluded from processing. These columns will be returned in the
+        final DataFrame without being modified.
+
+    time : str, optional, default=None
+        The name of the time column to sort the DataFrame in case of time series data.
+
+    scaling : str, default="none"
+        The method used to scale numerical features:
+        - "none"        : No scaling is applied   
+        - "normalize"   : Normalizes numerical features to the [0, 1] range.
+        - "standardize" : Standardizes numerical features to have a mean of 0 and a standard deviation of 1.
+        - "quantile"    : Transforms numerical features using quantiles information.
+        - "kbins"       : Converts continuous numerical data into discrete bins. The number of bins is defined by the parameter n_bin
+
+
+    num_fill_null : FillNullStrategy or str, default="mean"
+        Strategy or value used to fill null values in numerical features:
+        - "mean"        : Fills null values with the mean of the column.
+        - "interpolate" : Fills null values using interpolation.
+        - "forward"     : Fills null values using the previous non-null value.
+        - "backward"    : Fills null values using the next non-null value.
+        - "min"         : Fills null values with the minimum value of the column.
+        - "max"         : Fills null values with the maximum value of the column.
+        - "zero"        : Fills null values with zeros.
+        - "one"         : Fills null values with ones.
+        - value         : Fills null values with the specified value.
+
+    n_bins : int, default=0
+        Number of bins to discretize numerical features. If set to a value greater than 0 and if scaling=="kbins",
+        numerical features are discretized into the specified number of bins using quantile-based
+        binning.
+
+    unseen_labels : str, default="ignore"
+        - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
+        - "error"         : Raise an error if new data contains labels unseen during fit.
+
+    target_column : str, default=None
 
     Attributes
     ----------
@@ -35,9 +93,18 @@ class Preprocessor:
     temporal_features : Tuple[str]
         Names of the temporal features in the dataset.
     discarded_features : Union[List[str], Dict[str, str]]
-        Features that were discarded during preprocessing, along with reasons if available.
+        Features that were discarded during preprocessing, along with reason they were discarded, if available.
     single_value_columns : Dict[str, str]
         Dictionary storing columns with only one unique value, along with the unique value.
+
+    Raises
+    ------
+    ValueError
+        If `discarding_threshold` is not between 0 and 1.
+
+    Notes
+    -----
+    The constructor transforms Pandas DataFrames into Polars LazyFrames for more efficient processing.
     """
     def __init__(
             self, 
@@ -54,78 +121,6 @@ class Preprocessor:
             unseen_labels = 'ignore',
             target_columns = None,
         ):
-        """
-        Initialize the Preprocessor class.
-
-        Parameters
-        ----------
-        data : pl.LazyFrame or pl.DataFrame or pd.DataFrame
-            The dataset to be processed. It can be a Polars LazyFrame, Polars DataFrame, or Pandas DataFrame.
-
-        discarding_threshold : float, optional, default=0.9
-            A float value between 0 and 1 that sets the threshold for discarding categorical features.
-            If more than `discarding_threshold * 100%` of values in a categorical feature are unique,
-            the column is discarded. For instance, if `discarding_threshold=0.9`, a column will be
-            discarded if more than 90% of its values are unique.
-
-        get_discarded_info : bool, optional, default=False
-            If set to `True`, the preprocessor will feature the method `get_discarded_features_reason`,
-            which provides information on which columns were discarded and the reason for discarding.
-            Note that enabling this option may significantly slow down the processing operation.
-            The list of discarded columns is available even when `get_discarded_info=False`, so consider
-            setting this flag to `True` only if you need to know why a column was discarded or, in the case
-            of columns containing only one unique value, what that value was.
-
-        excluded_col : List, optional, default=[]
-            A list of column names to be excluded from processing. These columns will be returned in the
-            final DataFrame without being modified.
-
-        time : str, optional, default=None
-            The name of the time column to sort the DataFrame in case of time series data.
-
-       scaling : str, default="normalize"
-            The method used to scale numerical features:
-            - "none"        : No scaling is applied   
-            - "normalize"   : Normalizes numerical features to the [0, 1] range.
-            - "standardize" : Standardizes numerical features to have a mean of 0 and a standard deviation of 1.
-            - "quantile"    : Transforms numerical features using quantiles information.
-            - "kbins"       : Converts continuous numerical data into discrete bins. The number of bins is defined by the parameter n_bin
-
-
-        num_fill_null : FillNullStrategy or str, default="mean"
-            Strategy or value used to fill null values in numerical features:
-            - "mean"        : Fills null values with the mean of the column.
-            - "interpolate" : Fills null values using interpolation.
-            - "forward"     : Fills null values using the previous non-null value.
-            - "backward"    : Fills null values using the next non-null value.
-            - "min"         : Fills null values with the minimum value of the column.
-            - "max"         : Fills null values with the maximum value of the column.
-            - "zero"        : Fills null values with zeros.
-            - "one"         : Fills null values with ones.
-            - value         : Fills null values with the specified value.
-
-        n_bins : int, default=0
-            Number of bins to discretize numerical features. If set to a value greater than 0 and if scaling=="kbins",
-            numerical features are discretized into the specified number of bins using quantile-based
-            binning.
-
-        unseen_labels : str, default="ignore"
-            - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
-            - "error"         : Raise an error if new data contains labels unseen during fit.
-
-        target_column : str, default=None
-
-        Raises
-        ------
-        ValueError
-            If `discarding_threshold` is not between 0 and 1.
-
-        Notes
-        -----
-        - The constructor transforms Pandas DataFrames into Polars LazyFrames for more efficient processing.
-        - The methods `_infer_feature_types` and `_feature_selection` are called to handle feature type
-        inference and feature selection.
-        """
         # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
         if isinstance(data, pd.DataFrame):
             self.data_was_pd = True
@@ -159,29 +154,6 @@ class Preprocessor:
         # Initialization of NumericalTransformer and CategoricalTransformer
         self.numerical_transformer   = NumericalTransformer(data, self)
         self.categorical_transformer = CategoricalTransformer(data, self)
-
-        # if self.n_bins > 0:
-        #     # KBinsDiscretizer applied to numerical features to discretize continuous numerical features into a specified number of bins.
-        #     # This is useful for transforming continuous data into categorical data, which can be beneficial for certain types of analysis or models.
-        #     self.n_bins_labels=list(map(str, list(range(0, n_bins))))     
-        # else:
-        #     match scaling:
-        #         case "none":
-        #             pass
-        #         case "normalize":
-        #             # Normalization parameters of numerical features
-        #             self.numerical_parameters = [data.select(col_num).min().collect(), 
-        #                                          data.select(col_num).max().collect()]
-        #         case "standardize":
-        #             # Standardization parameters of numerical features
-        #             self.numerical_parameters = [data.select(col_num).mean().collect(), 
-        #                                          data.select(col_num).std().collect()] 
-        #         case "quantile":
-        #             quantile_maps = calculate_quantile_mappings(data.select(col_num).collect())      
-        #             self.numerical_parameters = quantile_maps
-        #         case _:
-        #             raise ValueError(f"Unknown scaling method: {scaling}")
-
 
     def _infer_feature_types(self, data: pl.LazyFrame) -> None:
         """
@@ -312,6 +284,13 @@ class Preprocessor:
         - Categorical features are filled with the most frequent value and then one-hot encoded.
         - Numerical features can be normalized, standardized, or discretized based on the specified parameters.
         - Temporal features are filled using interpolation and reordered to the beginning of the dataset.
+
+        Example:
+        --------
+        ```python
+        preprocessor = Preprocessor(real_data, scaling="standardize")
+        transformed_data = preprocessor.transform(real_data)
+        ```
         """
         # Transform data from Pandas.DataFrame or Polars.DataFrame to Polars.LazyFrame
         if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
@@ -374,6 +353,45 @@ class Preprocessor:
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame,
     ) -> pl.DataFrame:
         """
+        Reverse the transformations applied during the `preprocessor.transform(data)` phase.
+
+        This method performs the inverse transformations on numerical and categorical
+        features to restore the original dataset format.
+
+        Parameters:
+        ----------
+        data : pl.LazyFrame | pl.DataFrame | pd.DataFrame
+            The input dataset in either Polars LazyFrame, Polars DataFrame, or Pandas DataFrame format.
+            The format must match the dataset type initially provided when the Preprocessor was initialized.
+
+        Returns:
+        -------
+        pl.DataFrame
+            A Polars DataFrame with all transformations reversed, including:
+            - Restored numerical features (inverse normalization, standardization, or quantile transformation).
+            - Reconstructed categorical features from one-hot encoding.
+
+        Raises:
+        ------
+        SystemExit
+            If the provided data type does not match the originally initialized dataset type.
+
+        Notes:
+        ------
+        - If `data_was_pd` is `True`, the method expects and processes a Pandas DataFrame.
+        - If `data_was_pd` is `False`, it expects and processes a Polars DataFrame or LazyFrame.
+        - The numerical features are reversed based on the stored transformation method (`normalize`, `standardize`, `quantile`).
+        - One-hot encoded categorical columns are reconstructed into their original categorical format.
+
+        Example:
+        --------
+        ```python
+        preprocessor = Preprocessor(real_data, scaling="standardize")
+        transformed_data = preprocessor.transform(real_data)
+        
+        # Reverse the transformations
+        original_data = preprocessor.inverse_transform(transformed_data)
+        ```
         """
         # Transform data from Pandas.DataFrame or Polars.LazyFrame to Polars.DataFrame
         if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
