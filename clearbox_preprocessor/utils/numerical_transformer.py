@@ -130,6 +130,26 @@ class NumericalTransformer:
 
     def transform(self, data: pl.DataFrame):
         """
+        Apply numerical transformations to the dataset.
+
+        This method applies scaling techniques such as normalization, standardization, 
+        quantile transformation, or k-bins discretization to numerical features.
+
+        Parameters
+        ----------
+        data : pl.DataFrame
+            A Polars DataFrame containing numerical features to be transformed.
+
+        Returns
+        -------
+        pl.DataFrame
+            A Polars DataFrame with numerical features transformed based on the selected 
+            scaling method.
+
+        Raises
+        ------
+        ValueError
+            If an invalid scaling method is provided.
         """
         scaling = self.scaling
         numerical_features = self.numerical_features
@@ -165,6 +185,27 @@ class NumericalTransformer:
 
     def inverse_transform(self, data: pl.DataFrame):
         """
+        Reverse the transformations applied to numerical features.
+
+        This method restores the original numerical values by applying the inverse of 
+        the normalization, standardization, or quantile transformation that was applied 
+        during the preprocessing phase.
+
+        Parameters
+        ----------
+        data : pl.DataFrame
+            A Polars DataFrame containing transformed numerical features.
+
+        Returns
+        -------
+        pl.DataFrame
+            A Polars DataFrame where numerical features have been reverted 
+            to their original scale.
+
+        Raises
+        ------
+        ValueError
+            If an invalid scaling method is provided.
         """
         numerical_features  = self.numerical_features
         
