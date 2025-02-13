@@ -23,7 +23,9 @@ sys.path.insert(0, os.path.abspath('../../'))
 extensions = [
     'sphinx.ext.autodoc',
     "sphinx.ext.coverage",
+    'sphinx.ext.viewcode',  # Add links to source code
     'sphinx.ext.napoleon',
+    'sphinx.ext.intersphinx',  # Link to other project's documentation
     "sphinxemoji.sphinxemoji",
     "myst_parser",
     'sphinx_rtd_theme'
@@ -33,6 +35,7 @@ sphinxemoji_style = 'twemoji'
 
 myst_enable_extensions = [
     "html_image", # Allows html images format conversion
+    "footnotes",
 ]
 
 source_suffix = {
@@ -49,6 +52,7 @@ html_theme_options = {
     "logo_only": True,
     "display_version": True,
     "style_nav_header_background": "#483a8f",
+    "prev_next_buttons_location": None  # Removes "Previous" and "Next" buttons
 }
 html_css_files = [
     'style.css',
