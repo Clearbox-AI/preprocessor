@@ -104,6 +104,8 @@ class NumericalTransformer:
         n_bins = preprocessor.n_bins
         self.n_bins = n_bins
         self.n_bins_labels = None
+        num_fill_null = preprocessor.num_fill_null
+        self.num_fill_null = num_fill_null
 
         match scaling:
             case "none":
@@ -132,7 +134,7 @@ class NumericalTransformer:
         """
         Apply numerical transformations to the dataset.
 
-        This method applies scaling techniques such as normalization, standardization, 
+        This method fills null values and applies scaling techniques such as normalization, standardization, 
         quantile transformation, or k-bins discretization to numerical features.
 
         Parameters
@@ -153,26 +155,39 @@ class NumericalTransformer:
         """
         scaling = self.scaling
         numerical_features = self.numerical_features
+        num_fill_null = self.num_fill_null
+        numerical_parameters = self.numerical_parameters
 
+        # Fill null values with the specified strategy
+        col_num = pl.col(numerical_features)
+        if isinstance(num_fill_null, str):
+            if num_fill_null == "interpolate":
+                data = data.with_columns(col_num).interpolate()
+            else:
+                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
+        else:
+            data = data.with_columns(col_num.fill_null(num_fill_null))
+
+        # Scale numerical features with the specified method
         match scaling:
             case "none":
                 pass
             case "normalize":
                 # Normalization of numerical features
                 for col in data.select(numerical_features).columns:
-                    col_min = self.numerical_parameters[0][col].item()
-                    col_max = self.numerical_parameters[1][col].item()
+                    col_min = numerical_parameters[0][col].item()
+                    col_max = numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
             case "standardize":
                 # Standardization of numerical features
                 for col in data.select(numerical_features).columns:
-                    col_mean = self.numerical_parameters[0][col].item()
-                    col_std  = self.numerical_parameters[1][col].item()
+                    col_mean = numerical_parameters[0][col].item()
+                    col_std  = numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
             case "quantile":
                 # Quantile transformation of numerical features
                 num_data = _transform_with_quantiles(data.select(numerical_features), 
-                                                    self.numerical_parameters, 
+                                                    numerical_parameters, 
                                                     output_distribution="normal")    
                 for col in num_data.columns:
                     data = data.with_columns(num_data[col].alias(col))

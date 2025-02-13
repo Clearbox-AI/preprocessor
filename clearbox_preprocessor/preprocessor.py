@@ -303,7 +303,7 @@ class Preprocessor:
             sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
 
         # Replace empty strings ("") with None value
-        col_str = cs.string()-cs.by_name(self.excluded_col)
+        col_str = pl.col(self.categorical_features)
         data = data.with_columns(col_str.replace("",None)) 
 
         # Drop discarded columns, previously defined in _feature_selection()
@@ -313,28 +313,22 @@ class Preprocessor:
             data = data.drop(self.discarded_features)
 
         # Temporal features processing
-        #   Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame 
-        col = cs.temporal()-cs.by_name(self.excluded_col)   
-        data = data.select(col.interpolate(), cs.all()-col)
+        # Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame 
+        time_col = pl.col(self.temporal_features)
+        data = data.select(time_col.interpolate(), cs.all()-time_col)
 
         # Numerical features processing
-        #   Fill Null values with the selcted strategy or value (default: "mean")
-        col_num = cs.numeric()-cs.by_name(self.excluded_col) 
-        if isinstance(self.num_fill_null, str):
-            if self.num_fill_null == "interpolate":
-                data = data.with_columns(col_num).interpolate()
-            else:
-                data = data.with_columns(col_num.fill_null(strategy=self.num_fill_null))
-        else:
-            data = data.with_columns(col_num.fill_null(self.num_fill_null))
-    
+        # Fill Null values with the selcted strategy or value (default: "mean")
+        # Scale numerical features if scaling parameter was specified
         data = self.numerical_transformer.transform(data)
 
         # Categorical feature processing
-        #   Substitute rare lables with "other", OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
-        #   The Dataframe is sorted according to "time" column if present
+        # Substitute rare lables with "other"
         data = self._rare_labels(data)
         data = data.collect()
+
+        # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
+        # The Dataframe is sorted according to "time" column if present
         df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
 
         # Raise an Error if a column in the new dataframe was not present in the encoded original datframe
@@ -403,9 +397,8 @@ class Preprocessor:
         else:
             sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
 
+        # Inverse transofmration of numerical and categorical features
         data = self.numerical_transformer.inverse_transform(data)
-
-        # Categorical features
         data = self.categorical_transformer.inverse_transform(data)
 
         return data
