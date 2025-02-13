@@ -14,14 +14,6 @@ from .utils.categorical_transformer import CategoricalTransformer
 
 
 class Preprocessor:
-    numerical_features   : Tuple[str]
-    categorical_features : Tuple[str]
-    temporal_features    : Tuple[str]
-    discarded_features   : Union[List[str], Dict[str, str]]
-    single_value_columns : Dict[str, str]
-    fill_null_strategy   : TypeAlias = Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"]
-    scaling              : TypeAlias = Literal["none", "normalize", "standardize", "quantile"]
-
     """
     A class for preprocessing datasets based on polars, including feature selection, handling missing values, scaling, 
     and time-series feature extraction.
@@ -115,8 +107,8 @@ class Preprocessor:
             time: str = None,
             missing_values_threshold: float = 0.999,
             n_bins: int = 0,
-            scaling: str = "none", 
-            num_fill_null : fill_null_strategy = "mean",
+            scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
+            num_fill_null : Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "mean",
             cat_labels_threshold: float = 0.01,
             unseen_labels = 'ignore',
             target_columns = None,
