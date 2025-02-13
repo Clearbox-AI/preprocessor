@@ -42,7 +42,7 @@ The `Preprocessor` class features the following input arguments, besides the inp
   
         String name of the time column by which to sort the dataframe in case of time series.
       
-   - `scaling_method: (default="normalize")`
+   - `scaling_method: (default="none")`
     
         Specifies the scaling operation to perform on numerical features.
         - "none"        : no scaling is applied
@@ -134,6 +134,14 @@ df = preprocessor.transform(q)
 df
 ```
 <img src="https://github.com/Clearbox-AI/preprocessor/assets/152599516/ba61531d-a462-4d58-847a-47127d6050fd" alt="image" width="52%" height="auto">
+
+It is possible to inverse transform the processed dataframe with the method `preprocessor.inverse_transform()`.
+
+```python
+preprocessor = Preprocessor(q)
+df = preprocessor.transform(q)
+inverse_df = preprocessor.inverse_transform(df)
+```
 
 If the Processor's argument `get_discarded_info` is set to `True` during initialization, it is possible to call the method `get_discarded_features_reason()` to display the discarded features. 
 In the case of discarded single-valued columns, the value contained is also displayed and is available in a dictionary called `single_value_columns`, stored in the Preprocessor instance, and can be used as metadata.
