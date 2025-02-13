@@ -31,6 +31,7 @@ extensions = [
     'sphinx_rtd_theme'
 ]
 
+autodoc_class_attributes = False
 sphinxemoji_style = 'twemoji'
 
 myst_enable_extensions = [
