@@ -216,6 +216,7 @@ class Preprocessor:
         for col in self.categorical_features:
             freq = (
                 data
+                # .select(col)
                 .group_by(col)
                 .agg(pl.len().alias("frequency"))
             )
@@ -226,7 +227,7 @@ class Preprocessor:
                 .select(col)
                 .collect()  
             )
-            if rare_labels.height > 0:
+            if rare_labels.__len__() > 0:
                 rare_values_list = rare_labels.get_column(col).to_list()
             else:
                 rare_values_list = []
@@ -296,7 +297,7 @@ class Preprocessor:
 
         # Replace empty strings ("") with None value
         col_str = pl.col(self.categorical_features)
-        data = data.with_columns(col_str.replace("",None)) 
+        data = data.with_columns(col_str.replace({"":None, " ":None})) 
 
         # Drop discarded columns, previously defined in _feature_selection()
         if isinstance(self.discarded_features, dict):
@@ -307,7 +308,7 @@ class Preprocessor:
         # Temporal features processing
         # Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame 
         time_col = pl.col(self.temporal_features)
-        data = data.select(time_col.interpolate(), cs.all()-time_col)
+        data = data.with_columns(time_col.interpolate(), cs.all()-time_col)
 
         # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
@@ -502,3 +503,11 @@ class Preprocessor:
         Return the list of categorical features.
         """
         return self.categorical_features
+
+if __name__=="__main__":
+
+    import os
+    file_path = "https://raw.githubusercontent.com/Clearbox-AI/SURE/main/examples/data/census_dataset"
+    real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
+    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='standardize')
+    real_data_preprocessed  = preprocessor.transform(real_data)
