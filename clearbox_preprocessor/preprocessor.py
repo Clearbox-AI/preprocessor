@@ -134,7 +134,6 @@ class Preprocessor:
         self.time                   = time
         self.n_bins_labels          = None
         self.n_bins                 = n_bins
-        self.numerical_parameters   = None
         self.num_fill_null          = num_fill_null
         self.scaling                = scaling
         self.cat_labels_threshold   = cat_labels_threshold
@@ -144,8 +143,10 @@ class Preprocessor:
         self._feature_selection(data)
 
         # Initialization of NumericalTransformer and CategoricalTransformer
-        self.numerical_transformer   = NumericalTransformer(data, self)
-        self.categorical_transformer = CategoricalTransformer(data, self)
+        if len(self.numerical_features) > 0:
+            self.numerical_transformer   = NumericalTransformer(data, self)
+        if len(self.categorical_features) > 0:
+            self.categorical_transformer = CategoricalTransformer(data, self)
 
     def _infer_feature_types(self, data: pl.LazyFrame) -> None:
         """
@@ -312,7 +313,8 @@ class Preprocessor:
         # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
         # Scale numerical features if scaling parameter was specified
-        data = self.numerical_transformer.transform(data)
+        if hasattr(self, "numerical_transformer"):
+            data = self.numerical_transformer.transform(data)
 
         # Categorical feature processing
         # Substitute rare lables with "other"
@@ -321,13 +323,14 @@ class Preprocessor:
 
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
-        df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
+        if hasattr(self, "categorical_transformer"):
+            df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
 
-        # Raise an Error if a column in the new dataframe was not present in the encoded original datframe
-        if self.unseen_labels == 'error':
-            unseen = [col for col in new_encoded_columns if col not in self.categorical_transformer.original_encoded_columns]
-            if unseen:
-                warnings.warn(f"New data contains unseen categorical columns: {unseen}", UserWarning)
+            # Raise an Error if a column in the new dataframe was not present in the encoded original datframe
+            if self.unseen_labels == 'error':
+                unseen = [col for col in new_encoded_columns if col not in self.categorical_transformer.original_encoded_columns]
+                if unseen:
+                    warnings.warn(f"New data contains unseen categorical columns: {unseen}", UserWarning)
         
         if self.data_was_pd:
             df = df.to_pandas()        
@@ -390,8 +393,10 @@ class Preprocessor:
             sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
 
         # Inverse transofmration of numerical and categorical features
-        data = self.numerical_transformer.inverse_transform(data)
-        data = self.categorical_transformer.inverse_transform(data)
+        if hasattr(self, "numerical_transformer"):
+            data = self.numerical_transformer.inverse_transform(data)
+        if hasattr(self, "categorical_transformer"):
+            data = self.categorical_transformer.inverse_transform(data)
 
         return data
     
@@ -468,6 +473,24 @@ class Preprocessor:
         self.features_filtered = features_filtered
         
         return features_filtered
+
+    def get_features_sizes(self) -> Tuple[List[int], List[int]]:
+        """
+        Gets the sizes of ordinal and categorical features after transformation.
+
+        Returns:
+            Tuple: Sizes of ordinal and categorical features.
+        """
+        numerical_sizes   = []
+        categorical_sizes = []
+
+        if hasattr(self, "numerical_transformer"):
+            numerical_sizes.append(len(self.numerical_features))
+        if hasattr(self, "categorical_transformer"):
+            for values in self.categorical_transformer.original_encoded_columns.values():
+                categorical_sizes.append(len(values))
+
+        return numerical_sizes, categorical_sizes
 
     def get_numerical_features(self) -> Tuple[str]:
         """
