@@ -23,12 +23,12 @@ def _calculate_quantile_mappings(data, n_quantiles=1000):
             quantile_maps[col] = (sorted_values, quantiles)
     return quantile_maps
 
-def _transform_with_quantiles(new_data, quantile_maps, output_distribution="uniform"):
+def _transform_with_quantiles(data, quantile_maps, output_distribution="uniform"):
     """
     Transforms a new DataFrame using precomputed quantile mappings into the target distribution.
 
     Parameters:
-        new_data (pl.DataFrame): Data to be transformed.
+        data (pl.DataFrame): Data to be transformed.
         quantile_maps (dict): Precomputed quantile mappings.
         output_distribution (str): Target distribution ("uniform" or "normal").
 
@@ -36,10 +36,10 @@ def _transform_with_quantiles(new_data, quantile_maps, output_distribution="unif
         pl.DataFrame: Transformed DataFrame.
     """
     transformed_data = {}
-    for col in new_data.columns:
+    for col in data.columns:
         if col in quantile_maps.keys():
             train_values, train_quantiles = quantile_maps[col]
-            new_values = new_data[col].to_numpy()
+            new_values = data[col].to_numpy()
             
             quantiles = np.interp(new_values, train_values, train_quantiles)
             
@@ -53,7 +53,7 @@ def _transform_with_quantiles(new_data, quantile_maps, output_distribution="unif
             
             transformed_data[col] = transformed_values
         else:
-            transformed_data[col] = new_data[col].to_numpy()
+            transformed_data[col] = data[col].to_numpy()
     
     return pl.DataFrame(transformed_data)
 
@@ -174,13 +174,13 @@ class NumericalTransformer:
                 pass
             case "normalize":
                 # Normalization of numerical features
-                for col in data.select(numerical_features).columns:
+                for col in numerical_features:
                     col_min = numerical_parameters[0][col].item()
                     col_max = numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
             case "standardize":
                 # Standardization of numerical features
-                for col in data.select(numerical_features).columns:
+                for col in numerical_features:
                     col_mean = numerical_parameters[0][col].item()
                     col_std  = numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
