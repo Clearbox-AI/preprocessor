@@ -307,8 +307,9 @@ class Preprocessor:
 
         # Temporal features processing
         # Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame 
-        time_col = pl.col(self.temporal_features)
-        data = data.with_columns(time_col.interpolate(), cs.all()-time_col)
+        if self.temporal_features:
+            time_col = pl.col(self.temporal_features)
+            data = data.with_columns(time_col.interpolate(), cs.all()-time_col)
 
         # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
@@ -325,6 +326,10 @@ class Preprocessor:
         # The Dataframe is sorted according to "time" column if present
         if hasattr(self, "categorical_transformer"):
             df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
+
+            self.categorical_features_sizes = []
+            for values in new_encoded_columns.values():
+                    self.categorical_features_sizes.append(len(values))
 
             # Raise an Error if a column in the new dataframe was not present in the encoded original datframe
             if self.unseen_labels == 'error':
@@ -486,7 +491,10 @@ class Preprocessor:
 
         if hasattr(self, "numerical_transformer"):
             numerical_sizes.append(len(self.numerical_features))
-        if hasattr(self, "categorical_transformer"):
+        
+        if hasattr(self, "categorical_features_sizes"):
+            categorical_sizes = self.categorical_features_sizes
+        elif hasattr(self, "categorical_transformer"):
             for values in self.categorical_transformer.original_encoded_columns.values():
                 categorical_sizes.append(len(values))
 
