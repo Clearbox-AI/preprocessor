@@ -222,7 +222,7 @@ class Preprocessor:
 
             rare_labels = (
                 freq
-                .filter(pl.col("frequency") < self.cat_labels_threshold * data.__len__())
+                .filter(pl.col("frequency") < self.cat_labels_threshold * data.collect().__len__())
                 .select(col)
                 .collect()  
             )
