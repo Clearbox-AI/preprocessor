@@ -211,7 +211,6 @@ class Preprocessor:
         """
         Method to determine rare labels (labels with occurrency less than 'cat_labels_threshold') in categorical columns and replace them with "other".
         """
-        data_shape = data.select(pl.len()).collect()['len'][0]
         rare_labels_dict = {}
 
         for col in self.categorical_features:
@@ -223,7 +222,7 @@ class Preprocessor:
 
             rare_labels = (
                 freq
-                .filter(pl.col("frequency") < self.cat_labels_threshold * data_shape)
+                .filter(pl.col("frequency") < self.cat_labels_threshold * data.__len__())
                 .select(col)
                 .collect()  
             )
