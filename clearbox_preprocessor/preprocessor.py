@@ -148,21 +148,31 @@ class Preprocessor:
         if len(self.categorical_features) > 0:
             self.categorical_transformer = CategoricalTransformer(data, self)
 
-    def _infer_feature_types(self, data: pl.LazyFrame) -> None:
+    def _infer_feature_types(
+            self, 
+            data: pl.LazyFrame
+        ) -> None:
         """
         Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, temporal or boolean. 
         """
+        # Collect the schema to get column names and their data types
+        schema = data.collect_schema()
+
         # Store the names of boolean columns into 'boolean_features'
-        self.boolean_features = tuple(set(data.select(cs.boolean()).columns) - set(self.excluded_col))
+        boolean_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype == pl.Boolean]
+        self.boolean_features = tuple(set(boolean_columns) - set(self.excluded_col))
 
         # Store the names of temporal columns into 'temporal_features'
-        self.temporal_features = tuple(set(data.select(cs.temporal()).columns) - set(self.excluded_col))
+        temporal_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Date, pl.Datetime)]
+        self.temporal_features = tuple(set(temporal_columns) - set(self.excluded_col))
 
         # Store the names of numerical columns into 'numerical_features'
-        self.numerical_features = tuple(set(data.select(cs.numeric()).columns) - set(self.excluded_col))
+        numerical_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Int64, pl.Float64)]
+        self.numerical_features = tuple(set(numerical_columns) - set(self.excluded_col))
 
-        # Store the names of string columns into 'categorical_features'
-        self.categorical_features = tuple(set(data.select(cs.string()).columns) - set(self.excluded_col))
+        # Store the names of categorical columns into 'categorical_features'
+        categorical_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype == pl.Utf8]
+        self.categorical_features = tuple(set(categorical_columns) - set(self.excluded_col))
 
     def _feature_selection(
             self,
@@ -207,7 +217,10 @@ class Preprocessor:
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
         self.temporal_features    = tuple(set(self.temporal_features)    - set(self.discarded_features))
     
-    def _rare_labels(self, data):
+    def _rare_labels(
+            self, 
+            data: pl.LazyFrame
+        ) -> pl.LazyFrame:
         """
         Method to determine rare labels (labels with occurrency less than 'cat_labels_threshold') in categorical columns and replace them with "other".
         """
