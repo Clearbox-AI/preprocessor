@@ -103,21 +103,15 @@ class Preprocessor:
     Attributes
     ----------
     numerical_features : Tuple[str]
-
-        Names of the numerical features in the dataset.  **(Hidden from TOC)**  :noindex:
-
+        Names of the numerical features in the dataset.
     categorical_features : Tuple[str]
-
-        Names of the categorical features in the dataset.  **(Hidden from TOC)**  :noindex:
-
+        Names of the categorical features in the dataset.
     temporal_features : Tuple[str]
-
-        Names of the temporal features in the dataset.  **(Hidden from TOC)**  :noindex:
-
+        Names of the temporal features in the dataset.
     discarded_features : Union[List[str], Dict[str, str]]
-        Features that were discarded during preprocessing, along with reason they were discarded, if available.  **(Hidden from TOC)**  :noindex:
+        Features that were discarded during preprocessing, along with reason they were discarded, if available.
     single_value_columns : Dict[str, str]
-        Dictionary storing columns with only one unique value, along with the unique value.  **(Hidden from TOC)**  :noindex:
+        Dictionary storing columns with only one unique value, along with the unique value.
 
     Raises
     ------
@@ -355,6 +349,7 @@ class Preprocessor:
         Example:
         --------
         .. code-block:: python
+
             preprocessor = Preprocessor(real_data, scaling="standardize")
             transformed_data = preprocessor.transform(real_data)
         """
@@ -452,6 +447,7 @@ class Preprocessor:
         Example:
         --------
         .. code-block:: python
+        
             preprocessor = Preprocessor(real_data, scaling="standardize")
             transformed_data = preprocessor.transform(real_data)
             
