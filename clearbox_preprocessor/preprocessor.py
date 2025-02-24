@@ -29,18 +29,18 @@ class Preprocessor:
 
         A float value between 0 and 1 that sets the threshold for discarding categorical features.
         It defines a minimum frequency threshold for keeping a label as a separate category. If a label appears 
-        in less than `cat_labels_threshold * 100%` of the total occurrences in a categorical column, it is grouped 
-        into a generic `"other"` category. 
+        in less than ``cat_labels_threshold * 100%`` of the total occurrences in a categorical column, it is grouped 
+        into a generic ``"other"`` category. 
 
-        For instance, if `cat_labels_threshold=0.02` and a label appears less than 2% in the dataset, that label will be converted to `"other"`.
+        For instance, if ``cat_labels_threshold=0.02`` and a label appears less than 2% in the dataset, that label will be converted to `"other"`.
 
     get_discarded_info : bool, optional, default=False
 
-        If set to `True`, the preprocessor will feature the method `get_discarded_features_reason`,
+        If set to ``True``, the preprocessor will feature the method ``get_discarded_features_reason``,
         which provides information on which columns were discarded and the reason for discarding.
         Note that enabling this option may significantly slow down the processing operation.
         The list of discarded columns is available even when `get_discarded_info=False`, so consider
-        setting this flag to `True` only if you need to know why a column was discarded or, in the case
+        setting this flag to ``True`` only if you need to know why a column was discarded or, in the case
         of columns containing only one unique value, what that value was.
 
     excluded_col : List, optional, default=[]
@@ -116,7 +116,7 @@ class Preprocessor:
     Raises
     ------
     ValueError
-        If `cat_labels_threshold` is not between 0 and 1.
+        If ``cat_labels_threshold`` is not between 0 and 1.
 
     Notes
     -----
@@ -246,7 +246,7 @@ class Preprocessor:
         2. **High Cardinality Filtering**:
             Categorical columns in which a single unique value appears in more than 98% of the records are discarded.
         3. **Rare Label Aggregation**: 
-            In categorical columns, labels appearing in less than a specified proportion (`cat_labels_threshold`) of instances are aggregated into a single category `"other"`.
+            In categorical columns, labels appearing in less than a specified proportion (``cat_labels_threshold``) of instances are aggregated into a single category `"other"`.
 
         Warnings are issued for discarded features, and the remaining features are updated accordingly.
 
@@ -259,7 +259,7 @@ class Preprocessor:
         --------
         - Columns that contain only one unique value are discarded.
         - Categorical columns in which a single unique value appears in more than 98% of the records are discarded.
-        - Categorical columns with rare labels are modified by aggregating them into `"other"`.
+        - Categorical columns with rare labels are modified by aggregating them into ``"other"``.
         """
         self.discarded_features = []
 
@@ -414,7 +414,7 @@ class Preprocessor:
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame,
     ) -> pl.DataFrame:
         """
-        Reverse the transformations applied during the `preprocessor.transform(data)` phase.
+        Reverse the transformations applied during the ``preprocessor.transform(data)`` phase.
 
         This method performs the inverse transformations on numerical and categorical
         features to restore the original dataset format.
@@ -439,15 +439,15 @@ class Preprocessor:
 
         Notes:
         ------
-        - If `data_was_pd` is `True`, the method expects and processes a Pandas DataFrame.
-        - If `data_was_pd` is `False`, it expects and processes a Polars DataFrame or LazyFrame.
-        - The numerical features are reversed based on the stored transformation method (`normalize`, `standardize`, `quantile`).
+        - If ``data_was_pd`` is ``True``, the method expects and processes a Pandas DataFrame.
+        - If ``data_was_pd`` is ``False``, it expects and processes a Polars DataFrame or LazyFrame.
+        - The numerical features are reversed based on the stored transformation method (``normalize``, ``standardize``, ``quantile``).
         - One-hot encoded categorical columns are reconstructed into their original categorical format.
 
         Example:
         --------
         .. code-block:: python
-        
+
             preprocessor = Preprocessor(real_data, scaling="standardize")
             transformed_data = preprocessor.transform(real_data)
             
@@ -493,7 +493,7 @@ class Preprocessor:
             The label series associated with the data. It can be a Polars Series or a Pandas Series.
         time : str, optional
             The name of the time column used to sort the data. If not provided, the method 
-            will try to use `self.time` if available.
+            will try to use ``self.time`` if available.
         column_id : str, optional
             The name of the ID column, if present in the data. This is used to distinguish 
             different time-series within the same dataset.
@@ -510,13 +510,13 @@ class Preprocessor:
         ValueError
             If the provided label series is not a Polars Series or a Pandas Series.
         ValueError
-            If the time column name is not provided and `self.time` is not available.
+            If the time column name is not provided and ``self.time`` is not available.
 
         Notes
         -----
-        - The function uses the `extract_relevant_features` method from the `tsfresh` library 
+        - The function uses the ``extract_relevant_features`` method from the ``tsfresh`` library 
         to extract features from the time-series data.
-        - The method stores the filtered features in `self.features_filtered` for further use.
+        - The method stores the filtered features in ``self.features_filtered`` for further use.
         """
         # Transform input dataframe into Pandas.DataFrame
         if isinstance(data, pl.LazyFrame):
