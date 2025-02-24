@@ -29,7 +29,7 @@ class Preprocessor:
 
         A float value between 0 and 1 that sets the threshold for discarding categorical features.
         It defines a minimum frequency threshold for keeping a label as a separate category. If a label appears 
-        in less than ``cat_labels_threshold * 100%`` of the total occurrences in a categorical column, it is grouped 
+        in less than :code:`cat_labels_threshold * 100%` of the total occurrences in a categorical column, it is grouped 
         into a generic ``"other"`` category. 
 
         For instance, if ``cat_labels_threshold=0.02`` and a label appears less than 2% in the dataset, that label will be converted to `"other"`.
