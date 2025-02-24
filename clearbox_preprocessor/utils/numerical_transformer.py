@@ -156,7 +156,6 @@ class NumericalTransformer:
         scaling = self.scaling
         numerical_features = self.numerical_features
         num_fill_null = self.num_fill_null
-        numerical_parameters = self.numerical_parameters
 
         # Fill null values with the specified strategy
         col_num = pl.col(numerical_features)
@@ -175,19 +174,19 @@ class NumericalTransformer:
             case "normalize":
                 # Normalization of numerical features
                 for col in numerical_features:
-                    col_min = numerical_parameters[0][col].item()
-                    col_max = numerical_parameters[1][col].item()
+                    col_min = self.numerical_parameters[0][col].item()
+                    col_max = self.numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
             case "standardize":
                 # Standardization of numerical features
                 for col in numerical_features:
-                    col_mean = numerical_parameters[0][col].item()
-                    col_std  = numerical_parameters[1][col].item()
+                    col_mean = self.numerical_parameters[0][col].item()
+                    col_std  = self.numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
             case "quantile":
                 # Quantile transformation of numerical features
                 num_data = _transform_with_quantiles(data.select(numerical_features), 
-                                                    numerical_parameters, 
+                                                    self.numerical_parameters, 
                                                     output_distribution="normal")    
                 for col in num_data.columns:
                     data = data.with_columns(num_data[col].alias(col))
