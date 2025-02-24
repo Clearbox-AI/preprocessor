@@ -6,8 +6,9 @@ import polars.selectors as cs
 
 from tsfresh import extract_relevant_features
 
-from typing import List, Tuple, Literal
+from typing import List, Tuple, Literal, Dict
 import warnings
+import numpy as np
 
 from .utils.numerical_transformer import NumericalTransformer
 from .utils.categorical_transformer import CategoricalTransformer
@@ -109,7 +110,7 @@ class Preprocessor:
             n_bins: int = 0,
             scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
             num_fill_null : Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "mean",
-            cat_labels_threshold: float = 0.01,
+            cat_labels_threshold: float = 0.02,
             unseen_labels = 'ignore',
             target_columns = None,
         ):
@@ -174,89 +175,126 @@ class Preprocessor:
         categorical_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype == pl.Utf8]
         self.categorical_features = tuple(set(categorical_columns) - set(self.excluded_col))
 
+    def _shrink_labels(
+            self, 
+            instance: pl.DataFrame, 
+            too_much_info: Dict[str, List[str]]
+        ) -> pl.DataFrame:
+        """
+        Shrinks labels in the dataset by replacing rare labels with a generic category.
+
+        Parameters
+        ----------
+        instance : pl.DataFrame
+            The Polars DataFrame containing the dataset to modify.
+        too_much_info : dict[str, list[str]]
+            Dictionary where keys are column names and values are lists of labels to be replaced.
+
+        Returns
+        -------
+        pl.DataFrame
+            A modified DataFrame where specified labels are replaced.
+
+        """
+        expressions = []
+        schema = instance.collect_schema()
+
+        for column_name, values_to_shrink in too_much_info.items():
+            if schema[column_name] == pl.String:
+                # # Convert null values in string "None" and substyitute rare categorical labels with "other"
+                expr = (pl.col(column_name).
+                        fill_null("None").
+                        replace(values_to_shrink,['other']))
+            # else:
+            #     # Substitute rare numerical labels with -999999
+            #     expr = (pl.col(column_name).
+            #             replace(values_to_shrink,[-999999]))
+            expressions.append(expr)
+
+        # Apply all transformations in one go
+        instance = instance.with_columns(expressions)
+        return instance
+
     def _feature_selection(
             self,
             data: pl.LazyFrame,
         ) -> None:
         """
-        Perform a selection of the most useful columns for a given DataFrame, ignoring the other features. The selection is
-        performed in two steps:
-            1. The columns with more than 90% of missing values are discarded.
-            2. The columns containing only one value or, conversely, a large number of different values are discarded. In the latter
-               case the default threshold is equal to 90%, i.e. if more than 90% of the instances have different values then the entire
-               column is discarded.
+        Perform feature selection to retain the most informative columns in a DataFrame while discarding redundant features.
+
+        The selection process follows these steps:
+        
+        1. **Low-Variance Filtering**:
+            Columns containing only one value are discarded.
+        2. **High Cardinality Filtering**:
+            Categorical columns in which a single unique value appears in more than 98% of the records are discarded.
+        3. **Rare Label Aggregation**: 
+            In categorical columns, labels appearing in less than a specified proportion (`cat_labels_threshold`) of instances are aggregated into a single category `"other"`.
+
+        Warnings are issued for discarded features, and the remaining features are updated accordingly.
+
+        Parameters
+        ----------
+        data : pl.LazyFrame
+            The input Polars LazyFrame containing the dataset for feature selection.
+
+        Warnings
+        --------
+        - Columns that contain only one unique value are discarded.
+        - Categorical columns in which a single unique value appears in more than 98% of the records are discarded.
+        - Categorical columns with rare labels are modified by aggregating them into `"other"`.
         """
-        # Replace empty strings ("") with None value
+        self.discarded_features = []
+
         col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
         data = data.with_columns(col_cat.replace({"":None, " ":None})) 
+        data = data.collect()
 
-        col_all = cs.all()-cs.by_name(self.excluded_col)
-        
-        self.discarded_features = []
-        # All feature types - Discard columns if more than missing_threshold% of values is null or all values are equal (only one value in the column)
-        lf_ = data.select(pl.any_horizontal(col_all.drop_nulls().value_counts().count() == 1, 
-                                               )).collect()
-            
-        # Categorical features - Discard columns that contain a large number of different values (more than discarding_threshold % of values are diffent from each other)
-        lf_cat = data.select(col_cat.value_counts().count()>pl.len()*self.discarding_threshold).collect()
+        cat_features_stats = [
+            (i, data[i].value_counts(), data[i].n_unique(), data.columns.index(i))
+            for i in self.categorical_features
+        ]
 
-        for col in lf_.columns: 
-            if lf_.select(pl.col(col)).item() == True:
-                warning_message = f"{col} contains a unique value"
-                warnings.warn(warning_message)
+        ord_features_stats = [
+            (i, data[i].value_counts(), data[i].unique(), data.columns.index(i))
+            for i in self.numerical_features
+        ]
+
+        no_info = []
+        too_much_info = {}
+        # Categorical features
+        for column_stats in cat_features_stats:
+            if (column_stats[1].shape[0] == 1) or (column_stats[1].shape[0] >= (data.shape[0] * 0.98)):
+                no_info.append(column_stats[0])
+                warning_message = f"\n{column_stats[0]} contains a single value"
+                warnings.warn(warning_message+' and was discarded')
+                self.discarded_features.append(column_stats[0])
                 self.discarded_info.append(warning_message)
-            elif col in lf_cat.columns and lf_cat.select(pl.col(col)).item() == True:
-                warning_message = f"{col} contains too many labels"                
-                self.discarded_features.append(col)
-                warnings.warn(warning_message)
+            else:
+                counts = column_stats[1].select("count").to_numpy() / column_stats[1].select("count").sum()
+                values_to_shrink_indices = np.where(counts < self.cat_labels_threshold)[0]
+                if values_to_shrink_indices.shape[0] > 0 and column_stats[1].shape[0] > 2:
+                    too_much_info[column_stats[0]] = [column_stats[1][column_stats[0]].to_list()[i] for i in values_to_shrink_indices]
+                    warning_message = f"\nThe following rare labels of column {column_stats[0]} were aggregated:\n{too_much_info[column_stats[0]]}"
+                    warnings.warn(warning_message)
+
+        # Numerical features
+        for column_stats in ord_features_stats:
+            if column_stats[1].shape[0] <= 1:
+                no_info.append(column_stats[0])
+                warning_message = f"\n{column_stats[0]} contains a single value"  
+                warnings.warn(warning_message+' and was discarded')
+                self.discarded_features.append(column_stats[0])
                 self.discarded_info.append(warning_message)
+
+        data = self._shrink_labels(data, too_much_info)
+        self.discarded = (no_info, too_much_info)
 
         # Update the numerical_features, categorical_features and temporal_features lists removing the discarded columns
         self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
         self.temporal_features    = tuple(set(self.temporal_features)    - set(self.discarded_features))
-    
-    def _rare_labels(
-            self, 
-            data: pl.LazyFrame
-        ) -> pl.LazyFrame:
-        """
-        Method to determine rare labels (labels with occurrency less than 'cat_labels_threshold') in categorical columns and replace them with "other".
-        """
-        rare_labels_dict = {}
-
-        for col in self.categorical_features:
-            freq = (
-                data
-                # .select(col)
-                .group_by(col)
-                .agg(pl.len().alias("frequency"))
-            )
-
-            rare_labels = (
-                freq
-                .filter(pl.col("frequency") < self.cat_labels_threshold * data.collect().__len__())
-                .select(col)
-                .collect()  
-            )
-            if rare_labels.__len__() > 0:
-                rare_values_list = rare_labels.get_column(col).to_list()
-            else:
-                rare_values_list = []
-            rare_labels_dict[col] = rare_values_list
-        
-        
-        self.rare_labels = rare_labels_dict
-        for col in self.rare_labels.keys():
-            data = data.with_columns(
-                pl.when(pl.col(col).is_in(self.rare_labels[col]))
-                .then(pl.lit("other"))
-                .otherwise(pl.col(col))
-                .alias(col)
-            )
-
-        return data
     
     def transform(
             self, 
@@ -312,6 +350,9 @@ class Preprocessor:
         col_str = pl.col(self.categorical_features)
         data = data.with_columns(col_str.replace({"":None, " ":None})) 
 
+        # Substitute rare lables with "other" in categorical features
+        data = self._shrink_labels(data, self.discarded[1])
+
         # Drop discarded columns, previously defined in _feature_selection()
         if isinstance(self.discarded_features, dict):
             data = data.drop(self.discarded_features.keys())
@@ -331,14 +372,10 @@ class Preprocessor:
             data = self.numerical_transformer.transform(data)
 
         # Categorical feature processing
-        # Substitute rare lables with "other"
-        data = self._rare_labels(data)
-        data = data.collect()
-
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
         if hasattr(self, "categorical_transformer"):
-            df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
+            df, new_encoded_columns = self.categorical_transformer.transform(data.collect(), self.time)
 
             self.categorical_features_sizes = []
             for values in new_encoded_columns.values():
@@ -416,8 +453,10 @@ class Preprocessor:
         if hasattr(self, "categorical_transformer"):
             data = self.categorical_transformer.inverse_transform(data)
 
+        if self.data_was_pd:
+            data = data.to_pandas()        
         return data
-    
+     
     def extract_ts_features(
             self,
             data:      pl.LazyFrame | pd.DataFrame,
@@ -526,9 +565,15 @@ class Preprocessor:
         return self.categorical_features
 
 if __name__=="__main__":
-
+    #######################################################################################################
+    ## DEBUGGING                                                                                         ##
+    ## To run this part remove the dot from the import lines at the beginning of this file as following: ##
+    ## from utils.numerical_transformer import NumericalTransformer                                      ##
+    ## from utils.categorical_transformer import CategoricalTransformer                                  ##
+    #######################################################################################################
     import os
     file_path = "https://raw.githubusercontent.com/Clearbox-AI/SURE/main/examples/data/census_dataset"
     real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
+    
     preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='standardize')
     real_data_preprocessed  = preprocessor.transform(real_data)
