@@ -378,7 +378,7 @@ class Preprocessor:
         if hasattr(self, "categorical_transformer"):
             if isinstance(data, pl.LazyFrame):
                 data = data.collect()
-            df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
+            data, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
 
             self.categorical_features_sizes = []
             for values in new_encoded_columns.values():
@@ -391,8 +391,8 @@ class Preprocessor:
                     warnings.warn(f"New data contains unseen categorical columns: {unseen}", UserWarning)
         
         if self.data_was_pd:
-            df = df.to_pandas()        
-        return df
+            data = data.to_pandas()        
+        return data
 
 
     def inverse_transform(
