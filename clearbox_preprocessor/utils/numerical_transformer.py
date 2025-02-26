@@ -245,9 +245,11 @@ class NumericalTransformer:
                     data = data.with_columns(pl.col(col) *  col_std + col_mean) 
             case "quantile":
                 # Inverse quantile transformation
-                num_data = _inverse_transform_with_quantiles(data.select(numerical_features), 
-                                                            self.numerical_parameters, 
-                                                            input_distribution="normal")    
+                # num_data = _inverse_transform_with_quantiles(data.select(numerical_features), 
+                #                                             self.numerical_parameters, 
+                #                                             input_distribution="normal")    
+                num_data = pl.DataFrame(self.scaler.inverse_transform(data.select(numerical_features)).collect(),
+                                        schema=self.numerical_features)
                 for col in num_data.columns:
                     data = data.with_columns(num_data[col].alias(col))
             
