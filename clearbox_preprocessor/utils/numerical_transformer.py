@@ -19,7 +19,8 @@ def _calculate_quantile_mappings(data, n_quantiles=1000):
         if data[col].dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32]:
             values = data[col].to_numpy()
             sorted_values = np.sort(values)
-            quantiles = np.linspace(0, 1, len(sorted_values))
+            n_quantiles = max(1, min(n_quantiles, len(sorted_values)))
+            quantiles = np.linspace(0, 1, n_quantiles)
             quantile_maps[col] = (sorted_values, quantiles)
     return quantile_maps
 
