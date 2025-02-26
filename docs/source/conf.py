@@ -24,7 +24,8 @@ extensions = [
     'sphinx.ext.autodoc',
     "sphinx.ext.coverage",
     'sphinx.ext.viewcode',  # Add links to source code
-    'sphinx.ext.napoleon',
+    # 'sphinx.ext.napoleon',
+    "numpydoc"
     'sphinx.ext.intersphinx',  # Link to other project's documentation
     "sphinxemoji.sphinxemoji",
     "myst_parser",
