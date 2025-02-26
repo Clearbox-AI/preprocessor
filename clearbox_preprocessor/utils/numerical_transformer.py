@@ -1,9 +1,9 @@
 import polars as pl
 import numpy as np
 from scipy.stats import norm
+from sklearn.preprocessing import QuantileTransformer
 
-
-def _calculate_quantile_mappings(data, n_quantiles=1000):
+def _calculate_quantile_mappings(data):
     """
     Calculates quantile mappings for numerical columns in a DataFrame.
 
@@ -19,8 +19,7 @@ def _calculate_quantile_mappings(data, n_quantiles=1000):
         if data[col].dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32]:
             values = data[col].to_numpy()
             sorted_values = np.sort(values)
-            n_quantiles = max(1, min(n_quantiles, len(sorted_values)))
-            quantiles = np.linspace(0, 1, n_quantiles)
+            quantiles = np.linspace(0, 1, len(sorted_values))
             quantile_maps[col] = (sorted_values, quantiles)
     return quantile_maps
 
@@ -121,7 +120,9 @@ class NumericalTransformer:
                                                 data.select(numerical_features).std().collect()] 
             case "quantile":
                 # Quantile transformation parameters initialization
-                self.numerical_parameters = _calculate_quantile_mappings(data.select(numerical_features).collect())      
+                # self.numerical_parameters = _calculate_quantile_mappings(data.select(numerical_features).collect())      
+                self.numerical_parameters = []
+                self.scaler = QuantileTransformer(output_distribution="normal", random_state=0).fit(data.select(numerical_features).collect())
             case "kbins":
                 # K-bins discretizer parameters initialization
                 if n_bins==0:
@@ -186,9 +187,11 @@ class NumericalTransformer:
                     data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
             case "quantile":
                 # Quantile transformation of numerical features
-                num_data = _transform_with_quantiles(data.select(numerical_features).collect(), 
-                                                    self.numerical_parameters, 
-                                                    output_distribution="normal")    
+                # num_data = _transform_with_quantiles(data.select(numerical_features).collect(), 
+                #                                     self.numerical_parameters, 
+                #                                     output_distribution="normal")    
+                num_data = pl.DataFrame(self.scaler.transform(data.select(numerical_features).collect()),
+                                        schema = self.numerical_features)
                 for col in num_data.columns:
                     data = data.with_columns(num_data[col].alias(col))
             case "kbins":
