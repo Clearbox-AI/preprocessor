@@ -276,7 +276,7 @@ class Preprocessor:
                 values_to_shrink_indices = np.where(counts < self.cat_labels_threshold)[0]
                 if values_to_shrink_indices.shape[0] > 0 and column_stats[1].shape[0] > 2:
                     too_much_info[column_stats[0]] = [column_stats[1][column_stats[0]].to_list()[i] for i in values_to_shrink_indices]
-                    warning_message = f"\nThe following rare labels of column {column_stats[0]} were aggregated:\n{too_much_info[column_stats[0]]}"
+                    warning_message = f"\nThe following rare labels of column {column_stats[0]} were aggregated:\n    {too_much_info[column_stats[0]]}"
                     warnings.warn(warning_message)
 
         # Numerical features
