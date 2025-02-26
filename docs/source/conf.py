@@ -49,13 +49,26 @@ source_suffix = {
 templates_path = ['_templates']
 exclude_patterns = []
 
-html_theme = "sphinx_rtd_theme"
+# html_theme = "sphinx_rtd_theme"
+# html_theme_options = {
+#     "logo_only": True,
+#     "display_version": True,
+#     "style_nav_header_background": "#483a8f",
+#     "prev_next_buttons_location": None  # Removes "Previous" and "Next" buttons
+# }
+html_theme = "pydata-sphinx-theme"
 html_theme_options = {
-    "logo_only": True,
-    "display_version": True,
-    "style_nav_header_background": "#483a8f",
-    "prev_next_buttons_location": None  # Removes "Previous" and "Next" buttons
+    "theme_switcher": False,
+    "show_version": True,
+    "primary_color": "#483a8f",
+    "header_links_before_dropdown": 4,
+    "navbar_start": ["navbar-logo"],
+    "navbar_center": ["navbar-nav"],
+    "navbar_end": ["theme-switcher", "version-switcher", "search-field"],
+    "show_nav_level": 1,
+    "show_prev_next": False,
 }
+
 html_css_files = [
     'style.css',
 ]
