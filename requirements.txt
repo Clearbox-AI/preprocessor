@@ -7,5 +7,4 @@ tsfresh==0.20.3
 myst_parser
 sphinxemoji
 numpydoc
-pydata-sphinx-theme
 sphinx_rtd_theme
