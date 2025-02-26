@@ -4,6 +4,7 @@ scikit-learn
 scipy<=1.14
 polars<=1.17.1
 tsfresh==0.20.3
+sphinx 
 myst_parser
 sphinxemoji
 numpydoc

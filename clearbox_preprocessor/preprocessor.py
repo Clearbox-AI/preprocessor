@@ -57,34 +57,22 @@ class Preprocessor:
         The method used to scale numerical features:
 
         - "none"        : No scaling is applied   
-
         - "normalize"   : Normalizes numerical features to the [0, 1] range.
-
         - "standardize" : Standardizes numerical features to have a mean of 0 and a standard deviation of 1.
-
         - "quantile"    : Transforms numerical features using quantiles information.
-
         - "kbins"       : Converts continuous numerical data into discrete bins. The number of bins is defined by the parameter n_bin
 
     num_fill_null : FillNullStrategy or str, default="mean"
         Strategy or value used to fill null values in numerical features:
 
         - "mean"        : Fills null values with the mean of the column.
-
         - "interpolate" : Fills null values using interpolation.
-        
         - "forward"     : Fills null values using the previous non-null value.
-
         - "backward"    : Fills null values using the next non-null value.
-
         - "min"         : Fills null values with the minimum value of the column.
-
         - "max"         : Fills null values with the maximum value of the column.
-
         - "zero"        : Fills null values with zeros.
-
         - "one"         : Fills null values with ones.
-
         - value         : Fills null values with the specified value.
 
     n_bins : int, default=0
