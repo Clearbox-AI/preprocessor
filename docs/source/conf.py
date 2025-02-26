@@ -24,8 +24,8 @@ extensions = [
     'sphinx.ext.autodoc',
     "sphinx.ext.coverage",
     'sphinx.ext.viewcode',  # Add links to source code
-    # 'sphinx.ext.napoleon',
-    "numpydoc"
+    'sphinx.ext.napoleon',
+    "numpydoc",
     'sphinx.ext.intersphinx',  # Link to other project's documentation
     "sphinxemoji.sphinxemoji",
     "myst_parser",
@@ -59,6 +59,7 @@ html_theme_options = {
 html_css_files = [
     'style.css',
 ]
+
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
@@ -69,6 +70,10 @@ html_favicon = "img/favicon.ico"
 
 master_doc = 'index'  # Ensure this points to your main document
 
-# Napoleon settings
-napoleon_google_docstring = False
-napoleon_numpy_docstring = True
+# # Napoleon settings
+# napoleon_google_docstring = False
+# napoleon_numpy_docstring = True
+
+# Control how numpydoc handles documentation generation.
+numpydoc_show_class_members = False  # Don't show class members in the class docstring
+numpydoc_class_members_toctree = False  # Avoid creating a separate TOC for class members
