@@ -56,7 +56,7 @@ exclude_patterns = []
 #     "style_nav_header_background": "#483a8f",
 #     "prev_next_buttons_location": None  # Removes "Previous" and "Next" buttons
 # }
-html_theme = "pydata-sphinx-theme"
+html_theme = "pydata_sphinx_theme"
 html_theme_options = {
     "theme_switcher": False,
     "show_version": True,
