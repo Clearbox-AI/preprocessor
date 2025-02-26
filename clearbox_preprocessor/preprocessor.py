@@ -93,7 +93,7 @@ class Preprocessor:
 
     discarded_features : Union[List[str], Dict[str, str]]
         Features that were discarded during preprocessing, along with reason they were discarded, if available.
-        
+
     single_value_columns : Dict[str, str]
         Dictionary storing columns with only one unique value, along with the unique value.
 
@@ -376,7 +376,9 @@ class Preprocessor:
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
         if hasattr(self, "categorical_transformer"):
-            df, new_encoded_columns = self.categorical_transformer.transform(data.collect(), self.time)
+            if isinstance(data, pl.LazyFrame):
+                data = data.collect()
+            df, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
 
             self.categorical_features_sizes = []
             for values in new_encoded_columns.values():

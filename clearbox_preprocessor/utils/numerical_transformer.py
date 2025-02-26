@@ -23,7 +23,7 @@ def _calculate_quantile_mappings(data, n_quantiles=1000):
             quantile_maps[col] = (sorted_values, quantiles)
     return quantile_maps
 
-def _transform_with_quantiles(data, quantile_maps, output_distribution="uniform"):
+def _transform_with_quantiles(data, quantile_maps, output_distribution="normal"):
     """
     Transforms a new DataFrame using precomputed quantile mappings into the target distribution.
 
@@ -185,7 +185,7 @@ class NumericalTransformer:
                     data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
             case "quantile":
                 # Quantile transformation of numerical features
-                num_data = _transform_with_quantiles(data.select(numerical_features), 
+                num_data = _transform_with_quantiles(data.select(numerical_features).collect(), 
                                                     self.numerical_parameters, 
                                                     output_distribution="normal")    
                 for col in num_data.columns:
