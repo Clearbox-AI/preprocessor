@@ -78,3 +78,4 @@ master_doc = 'index'  # Ensure this points to your main document
 # Control how numpydoc handles documentation generation.
 numpydoc_show_class_members = False  # Don't show class members in the class docstring
 numpydoc_class_members_toctree = False  # Avoid creating a separate TOC for class members
+numpydoc_attributes_as_param_list = True

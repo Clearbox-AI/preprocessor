@@ -22,11 +22,9 @@ class Preprocessor:
     Parameters
     ----------
     data : pl.LazyFrame or pl.DataFrame or pd.DataFrame
-
         The dataset to be processed. It can be a Polars LazyFrame, Polars DataFrame, or Pandas DataFrame.
 
     cat_labels_threshold : float, optional, default=0.02
-
         A float value between 0 and 1 that sets the threshold for discarding categorical features.
         It defines a minimum frequency threshold for keeping a label as a separate category. If a label appears 
         in less than :code:`cat_labels_threshold * 100%` of the total occurrences in a categorical column, it is grouped 
@@ -35,7 +33,6 @@ class Preprocessor:
         For instance, if ``cat_labels_threshold=0.02`` and a label appears less than 2% in the dataset, that label will be converted to `"other"`.
 
     get_discarded_info : bool, optional, default=False
-
         If set to ``True``, the preprocessor will feature the method ``get_discarded_features_reason``,
         which provides information on which columns were discarded and the reason for discarding.
         Note that enabling this option may significantly slow down the processing operation.
@@ -44,16 +41,13 @@ class Preprocessor:
         of columns containing only one unique value, what that value was.
 
     excluded_col : List, optional, default=[]
-
         A list of column names to be excluded from processing. These columns will be returned in the
         final DataFrame without being modified.
 
     time : str, optional, default=None
-
         The name of the time column to sort the DataFrame in case of time series data.
 
     scaling : str, default="none"
-
         The method used to scale numerical features:
 
         - "none"        : No scaling is applied   
@@ -81,9 +75,7 @@ class Preprocessor:
         binning.
 
     unseen_labels : str, default="ignore"
-
         - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
-
         - "error"         : Raise an error if new data contains labels unseen during fit.
 
     target_column : str, default=None
@@ -92,12 +84,16 @@ class Preprocessor:
     ----------
     numerical_features : Tuple[str]
         Names of the numerical features in the dataset.
+
     categorical_features : Tuple[str]
         Names of the categorical features in the dataset.
+
     temporal_features : Tuple[str]
         Names of the temporal features in the dataset.
+
     discarded_features : Union[List[str], Dict[str, str]]
         Features that were discarded during preprocessing, along with reason they were discarded, if available.
+        
     single_value_columns : Dict[str, str]
         Dictionary storing columns with only one unique value, along with the unique value.
 
