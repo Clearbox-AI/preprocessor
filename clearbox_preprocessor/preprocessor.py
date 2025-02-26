@@ -391,7 +391,7 @@ class Preprocessor:
                     warnings.warn(f"New data contains unseen categorical columns: {unseen}", UserWarning)
         
         if self.data_was_pd:
-            data = data.to_pandas()        
+            data = data.collect().to_pandas()        
         return data
 
 
