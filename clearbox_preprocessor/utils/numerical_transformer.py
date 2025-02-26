@@ -118,9 +118,7 @@ class NumericalTransformer:
                 # Standardization parameters initialization
                 self.numerical_parameters = [data.select(numerical_features).mean().collect(), 
                                                 data.select(numerical_features).std().collect()] 
-            case "quantile":
-                # Quantile transformation parameters initialization
-                # self.numerical_parameters = _calculate_quantile_mappings(data.select(numerical_features).collect())      
+            case "quantile":     
                 self.numerical_parameters = []
                 self.scaler = QuantileTransformer(output_distribution="normal", random_state=0).fit(data.select(numerical_features).collect())
             case "kbins":
@@ -185,11 +183,7 @@ class NumericalTransformer:
                     col_mean = self.numerical_parameters[0][col].item()
                     col_std  = self.numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
-            case "quantile":
-                # Quantile transformation of numerical features
-                # num_data = _transform_with_quantiles(data.select(numerical_features).collect(), 
-                #                                     self.numerical_parameters, 
-                #                                     output_distribution="normal")    
+            case "quantile": 
                 num_data = pl.DataFrame(self.scaler.transform(data.select(numerical_features).collect()),
                                         schema = self.numerical_features)
                 for col in num_data.columns:
@@ -243,11 +237,7 @@ class NumericalTransformer:
                     col_mean = self.numerical_parameters[0][col].item()
                     col_std  = self.numerical_parameters[1][col].item()
                     data = data.with_columns(pl.col(col) *  col_std + col_mean) 
-            case "quantile":
-                # Inverse quantile transformation
-                # num_data = _inverse_transform_with_quantiles(data.select(numerical_features), 
-                #                                             self.numerical_parameters, 
-                #                                             input_distribution="normal")    
+            case "quantile":   
                 num_data = pl.DataFrame(self.scaler.inverse_transform(data.select(numerical_features)),
                                         schema=self.numerical_features)
                 for col in num_data.columns:
