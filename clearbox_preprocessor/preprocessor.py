@@ -390,8 +390,12 @@ class Preprocessor:
                 if unseen:
                     warnings.warn(f"New data contains unseen categorical columns: {unseen}", UserWarning)
         
+        if isinstance(data, pl.LazyFrame):
+            data = data.collect()
+        
         if self.data_was_pd:
-            data = data.collect().to_pandas()        
+            data = data.to_pandas()   
+            
         return data
 
 
