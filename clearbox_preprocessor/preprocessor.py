@@ -338,14 +338,14 @@ class Preprocessor:
             transformed_data = preprocessor.transform(real_data)
         """
         # Transform data from Pandas.DataFrame or Polars.DataFrame to Polars.LazyFrame
-        if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
+        if isinstance(data, pd.DataFrame):
             data = pl.from_pandas(data).lazy()
-        elif isinstance(data, pl.DataFrame) and self.data_was_pd == False:
+        elif isinstance(data, pl.DataFrame):
             data = data.lazy()
-        elif isinstance(data, pl.LazyFrame) and self.data_was_pd == False:
+        elif isinstance(data, pl.LazyFrame):
             pass
         else:
-            sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
+            sys.exit('ErrorType\nThe datatype provided is not supported by the Preprocessor.')
 
         # Replace empty strings ("") with None value
         col_str = pl.col(self.categorical_features)
@@ -445,14 +445,14 @@ class Preprocessor:
             original_data = preprocessor.inverse_transform(transformed_data)
         """
         # Transform data from Pandas.DataFrame or Polars.LazyFrame to Polars.DataFrame
-        if isinstance(data, pd.DataFrame) and self.data_was_pd == True:
+        if isinstance(data, pd.DataFrame):
             data = pl.from_pandas(data)
-        elif isinstance(data, pl.DataFrame) and self.data_was_pd == False:
+        elif isinstance(data, pl.DataFrame):
             pass
-        elif isinstance(data, pl.LazyFrame) and self.data_was_pd == False:
+        elif isinstance(data, pl.LazyFrame):
             data = data.collect()
         else:
-            sys.exit('ErrorType\nThe datatype provided does not not match with the datatype of the dataset provided when the Preprocessor was initialized.')
+            sys.exit('ErrorType\nThe datatype provided is not supported by the Preprocessor.')
 
         # Inverse transofmration of numerical and categorical features
         if hasattr(self, "numerical_transformer"):

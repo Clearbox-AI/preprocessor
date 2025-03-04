@@ -11,7 +11,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="clearbox-preprocessor",  
-    version="0.10.8",  
+    version="0.10.9",  
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
     description="A polars based preprocessor for ML datasets",
