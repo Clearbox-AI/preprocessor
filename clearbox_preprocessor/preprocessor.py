@@ -345,7 +345,7 @@ class Preprocessor:
         elif isinstance(data, pl.LazyFrame):
             pass
         else:
-            sys.exit('ErrorType\nThe datatype provided is not supported by the Preprocessor.')
+            sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
 
         # Replace empty strings ("") with None value
         col_str = pl.col(self.categorical_features)
@@ -452,7 +452,7 @@ class Preprocessor:
         elif isinstance(data, pl.LazyFrame):
             data = data.collect()
         else:
-            sys.exit('ErrorType\nThe datatype provided is not supported by the Preprocessor.')
+            sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
 
         # Inverse transofmration of numerical and categorical features
         if hasattr(self, "numerical_transformer"):
