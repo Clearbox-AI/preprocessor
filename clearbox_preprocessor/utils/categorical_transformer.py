@@ -21,7 +21,6 @@ class CategoricalTransformer:
     def transform(
         self, 
         df: pl.DataFrame,
-        time: str = None,
     ) -> pl.DataFrame:
         """
         Perform one-hot encoding on categorical columns of the DataFrame.
@@ -42,9 +41,6 @@ class CategoricalTransformer:
         """
         categorical_features = self.categorical_features
         encoded_columns = {}
-
-        if time:
-            df = df.sort(time)
 
         for col in df.select(categorical_features).columns:
             if df[col].dtype == pl.String:

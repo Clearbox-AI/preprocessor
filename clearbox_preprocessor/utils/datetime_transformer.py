@@ -89,10 +89,14 @@ class DatetimeTransformer():
                                     data.select(self.time_features).std()] 
         return data.lazy()
     
-    def transform(self, data):
+    def transform(self, data, time=None):
         if isinstance(data, pl.LazyFrame):
             data = data.collect()
-
+        
+        if time is not None:
+            data = data.sort(time)
+        else:
+            data = data.sort(list(self.datetime_formats.keys())[0])
         data = self._infer_and_convert_time_columns(data) # Returns data with time columns converted to integers
         data = data.with_columns(pl.col(self.time_features).interpolate()) # Linear interpolation
 
@@ -109,4 +113,19 @@ class DatetimeTransformer():
         return data
 
     def inverse_transform(self, data):
-        pass
+        if self.scaling in ["normalize", "quantile", "kbins"]:
+            for col in self.time_features:
+                col_min = self.time_parameters[0][col].item()
+                col_max = self.time_parameters[1][col].item()
+                data = data.with_columns(pl.col(col) * (col_max - col_min) + col_min)
+        elif self.scaling == "standardize":
+            for col in self.time_features:
+                col_mean = self.time_parameters[0][col].item()
+                col_std  = self.time_parameters[1][col].item()
+                data = data.with_columns(pl.col(col) *  col_std + col_mean) 
+
+        for col, fmt in self.datetime_formats.items():
+            data = data.with_columns(pl.from_epoch(pl.col(col)*1e6, time_unit="us")) # Convert to Datetime format
+            data = data.with_columns(pl.col(col).dt.strftime(fmt).alias(col)) # Convert to string format and original datetime/date/time format format
+        
+        return data

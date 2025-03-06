@@ -371,8 +371,10 @@ class Preprocessor:
 
         # Time features processing
         # Convert time columns to timestamp integers, fill null values by linear interpolation and scale time columns
-        if self.time_features:
-            data = self.datetime_transformer.transform(data)
+        if len(self.time_features)>0:
+            data = self.datetime_transformer.transform(data, self.time)
+            if self.time not in self.datetime_transformer.datetime_formats.keys():
+                warnings.warn(f"The time column specified '{self.time}' was not detected as datetime type", UserWarning)
 
         # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
@@ -386,7 +388,7 @@ class Preprocessor:
         if hasattr(self, "categorical_transformer"):
             if isinstance(data, pl.LazyFrame):
                 data = data.collect()
-            data, new_encoded_columns = self.categorical_transformer.transform(data, self.time)
+            data, new_encoded_columns = self.categorical_transformer.transform(data)
 
             self.categorical_features_sizes = []
             for values in new_encoded_columns.values():
@@ -463,11 +465,13 @@ class Preprocessor:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
 
         # Inverse transofmration of numerical and categorical features
-        if hasattr(self, "numerical_transformer"):
+        if len(self.time_features)>0:
+            data = self.datetime_transformer.inverse_transform(data)
+        if len(self.numerical_features)>0:
             data = self.numerical_transformer.inverse_transform(data)
-        if hasattr(self, "categorical_transformer"):
+        if len(self.categorical_features)>0:
             data = self.categorical_transformer.inverse_transform(data)
-
+            
         if self.data_was_pd:
             data = data.to_pandas()        
         return data
@@ -589,21 +593,17 @@ if __name__=="__main__":
     import os
     import pandas as pd
     import polars as pl
+
+    # Tabular data
     # file_path = "https://raw.githubusercontent.com/Clearbox-AI/SURE/main/examples/data/census_dataset"
     # real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
+
+    # Time series
     file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
-    # file_path = "tutorials/data/daily_delhi_climate" # REMOVE WHEN ENGINE IS PUBLIC
     path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
     real_data = pl.read_csv(path)
 
-    # data = {
-    #     "date_col": ["2023-01-01", None, "2023-01-03"],
-    #     "time_col": ["12:00:00", "13:00:00", "14:00:00"],
-    #     "string_col": ["Hello", "World", "Hello"],
-    #     "non_date_col": [1, 2, 3]
-    # }
-    # real_data = pl.DataFrame(data)
-
-    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='normalize')
+    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', time="date", scaling='normalize')
     real_data_preprocessed  = preprocessor.transform(real_data)
-    print(real_data_preprocessed)
+    df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
+    a=1
