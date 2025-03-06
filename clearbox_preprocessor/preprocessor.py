@@ -10,9 +10,12 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-from .utils.numerical_transformer import NumericalTransformer
-from .utils.categorical_transformer import CategoricalTransformer
-
+# from .utils.numerical_transformer import NumericalTransformer
+# from .utils.categorical_transformer import CategoricalTransformer
+# from .utils.datetime_transformer import DatetimeTransformer
+from utils.numerical_transformer import NumericalTransformer
+from utils.categorical_transformer import CategoricalTransformer
+from utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
     """
@@ -88,8 +91,8 @@ class Preprocessor:
     categorical_features : Tuple[str]
         Names of the categorical features in the dataset.
 
-    temporal_features : Tuple[str]
-        Names of the temporal features in the dataset.
+    time_features : Tuple[str]
+        Names of the time features in the dataset.
 
     discarded_features : Union[List[str], Dict[str, str]]
         Features that were discarded during preprocessing, along with reason they were discarded, if available.
@@ -146,6 +149,10 @@ class Preprocessor:
         self.unseen_labels          = unseen_labels
 
         self._infer_feature_types(data)
+        self.datetime_transformer = DatetimeTransformer(self)
+        data = self.datetime_transformer.fit(data.collect()) # Returns data with time columns transformed into timestamp integer
+        self.time_features = self.datetime_transformer.time_features
+        self.categorical_features = tuple(set(self.categorical_features) - set(self.time_features))
         self._feature_selection(data)
 
         # Initialization of NumericalTransformer and CategoricalTransformer
@@ -153,13 +160,15 @@ class Preprocessor:
             self.numerical_transformer   = NumericalTransformer(data, self)
         if len(self.categorical_features) > 0:
             self.categorical_transformer = CategoricalTransformer(data, self)
+        # if len(self.time_features) > 0:
+        #     self.datetime_transformer = DatetimeTransformer(data, self)
 
     def _infer_feature_types(
             self, 
             data: pl.LazyFrame
         ) -> None:
         """
-        Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, temporal or boolean. 
+        Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, time or boolean. 
         """
         # Collect the schema to get column names and their data types
         schema = data.collect_schema()
@@ -168,9 +177,9 @@ class Preprocessor:
         boolean_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype == pl.Boolean]
         self.boolean_features = tuple(set(boolean_columns) - set(self.excluded_col))
 
-        # Store the names of temporal columns into 'temporal_features'
-        temporal_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Date, pl.Datetime)]
-        self.temporal_features = tuple(set(temporal_columns) - set(self.excluded_col))
+        # Store the names of time columns into 'time_features'
+        time_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Date, pl.Datetime)]
+        self.time_features = tuple(set(time_columns) - set(self.excluded_col))
 
         # Store the names of numerical columns into 'numerical_features'
         numerical_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Int64, pl.Float64)]
@@ -291,18 +300,18 @@ class Preprocessor:
         data = self._shrink_labels(data, too_much_info)
         self.discarded = (no_info, too_much_info)
 
-        # Update the numerical_features, categorical_features and temporal_features lists removing the discarded columns
+        # Update the numerical_features, categorical_features and time_features lists removing the discarded columns
         self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
-        self.temporal_features    = tuple(set(self.temporal_features)    - set(self.discarded_features))
+        self.time_features    = tuple(set(self.time_features)    - set(self.discarded_features))
     
     def transform(
             self, 
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame, 
         ) -> pl.DataFrame | pd.DataFrame:
         """
-        Transform the input dataset by processing numerical, temporal, and categorical columns.
+        Transform the input dataset by processing numerical, time, and categorical columns.
         This includes filling null values, scaling or discretizing numerical features, and encoding
         categorical features.
 
@@ -325,10 +334,10 @@ class Preprocessor:
 
         Notes
         -----
-        - The method identifies and processes numerical, temporal, and categorical features separately.
+        - The method identifies and processes numerical, time, and categorical features separately.
         - Categorical features are filled with the most frequent value and then one-hot encoded.
         - Numerical features can be normalized, standardized, or discretized based on the specified parameters.
-        - Temporal features are filled using interpolation and reordered to the beginning of the dataset.
+        - time features are filled using interpolation and reordered to the beginning of the dataset.
 
         Example:
         --------
@@ -346,7 +355,7 @@ class Preprocessor:
             pass
         else:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
-
+        
         # Replace empty strings ("") with None value
         col_str = pl.col(self.categorical_features)
         data = data.with_columns(col_str.replace({"":None, " ":None})) 
@@ -360,11 +369,10 @@ class Preprocessor:
         else:
             data = data.drop(self.discarded_features)
 
-        # Temporal features processing
-        # Fill Null values by interpolation and reorder columns such that temporal ones are positioned at the beginning of the LazyFrame 
-        if self.temporal_features:
-            time_col = pl.col(self.temporal_features)
-            data = data.with_columns(time_col.interpolate(), cs.all()-time_col)
+        # Time features processing
+        # Convert time columns to timestamp integers, fill null values by linear interpolation and scale time columns
+        if self.time_features:
+            data = self.datetime_transformer.transform(data)
 
         # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
@@ -372,7 +380,7 @@ class Preprocessor:
         if hasattr(self, "numerical_transformer"):
             data = self.numerical_transformer.transform(data)
 
-        # Categorical feature processing
+        # Categorical features processing
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
         if hasattr(self, "categorical_transformer"):
@@ -579,8 +587,23 @@ if __name__=="__main__":
     ## from utils.categorical_transformer import CategoricalTransformer                                  ##
     #######################################################################################################
     import os
-    file_path = "https://raw.githubusercontent.com/Clearbox-AI/SURE/main/examples/data/census_dataset"
-    real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
-    
-    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='standardize')
+    import pandas as pd
+    import polars as pl
+    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/SURE/main/examples/data/census_dataset"
+    # real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
+    file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
+    # file_path = "tutorials/data/daily_delhi_climate" # REMOVE WHEN ENGINE IS PUBLIC
+    path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
+    real_data = pl.read_csv(path)
+
+    # data = {
+    #     "date_col": ["2023-01-01", None, "2023-01-03"],
+    #     "time_col": ["12:00:00", "13:00:00", "14:00:00"],
+    #     "string_col": ["Hello", "World", "Hello"],
+    #     "non_date_col": [1, 2, 3]
+    # }
+    # real_data = pl.DataFrame(data)
+
+    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='normalize')
     real_data_preprocessed  = preprocessor.transform(real_data)
+    print(real_data_preprocessed)
