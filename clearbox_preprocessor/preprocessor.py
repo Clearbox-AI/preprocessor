@@ -10,12 +10,9 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-# from .utils.numerical_transformer import NumericalTransformer
-# from .utils.categorical_transformer import CategoricalTransformer
-# from .utils.datetime_transformer import DatetimeTransformer
-from utils.numerical_transformer import NumericalTransformer
-from utils.categorical_transformer import CategoricalTransformer
-from utils.datetime_transformer import DatetimeTransformer
+from .utils.numerical_transformer import NumericalTransformer
+from .utils.categorical_transformer import CategoricalTransformer
+from .utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
     """
@@ -149,10 +146,10 @@ class Preprocessor:
         self.unseen_labels          = unseen_labels
 
         self._infer_feature_types(data)
-        self.datetime_transformer = DatetimeTransformer(self)
-        data = self.datetime_transformer.fit(data.collect()) # Returns data with time columns transformed into timestamp integer
-        self.time_features = self.datetime_transformer.time_features
-        self.categorical_features = tuple(set(self.categorical_features) - set(self.time_features))
+        self.datetime_transformer   = DatetimeTransformer(self)
+        data                        = self.datetime_transformer.fit(data.collect()) # Return data with time columns transformed into timestamp integer
+        self.time_features          = self.datetime_transformer.time_features
+        self.categorical_features   = tuple(set(self.categorical_features) - set(self.time_features))
         self._feature_selection(data)
 
         # Initialization of NumericalTransformer and CategoricalTransformer
@@ -160,8 +157,6 @@ class Preprocessor:
             self.numerical_transformer   = NumericalTransformer(data, self)
         if len(self.categorical_features) > 0:
             self.categorical_transformer = CategoricalTransformer(data, self)
-        # if len(self.time_features) > 0:
-        #     self.datetime_transformer = DatetimeTransformer(data, self)
 
     def _infer_feature_types(
             self, 
@@ -606,4 +601,3 @@ if __name__=="__main__":
     preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', time="date", scaling='normalize')
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
-    a=1

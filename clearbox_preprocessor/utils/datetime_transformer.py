@@ -5,7 +5,6 @@ from dateutil.parser import parse
 class DatetimeTransformer():
     def __init__(
         self,
-        # data: pl.DataFrame,
         preprocessor
         ):
         self.datetime_formats = {}
