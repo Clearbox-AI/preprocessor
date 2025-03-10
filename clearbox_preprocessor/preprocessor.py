@@ -3,6 +3,7 @@ import sys
 import pandas as pd
 import polars as pl
 import polars.selectors as cs
+from sklearn.preprocessing import LabelEncoder
 
 from tsfresh import extract_relevant_features
 
@@ -10,9 +11,9 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-from .utils.numerical_transformer import NumericalTransformer
-from .utils.categorical_transformer import CategoricalTransformer
-from .utils.datetime_transformer import DatetimeTransformer
+from utils.numerical_transformer import NumericalTransformer
+from utils.categorical_transformer import CategoricalTransformer
+from utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
     """
@@ -78,8 +79,12 @@ class Preprocessor:
         - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
         - "error"         : Raise an error if new data contains labels unseen during fit.
 
-    target_column : str, default=None
+    ML_task : ["classification", "regression"], default=None
+        The Machie Learning task the dataset is used for. It can be either classification or regression.
 
+    target_column : str, default=None
+        The target coluymn for Machine Learning tasks. If the task is classification, the target column is encoded using LabelEncoder, while if it is regression the target column is normalized.
+    
     Attributes
     ----------
     numerical_features : Tuple[str]
@@ -118,7 +123,8 @@ class Preprocessor:
             scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
             num_fill_null : Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "mean",
             unseen_labels = 'ignore',
-            target_columns = None,
+            ML_task: Literal["classification", "regression"] = None,
+            target_column: str = None,
         ):
         # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
         if isinstance(data, pd.DataFrame):
@@ -144,6 +150,15 @@ class Preprocessor:
         self.scaling                = scaling
         self.cat_labels_threshold   = cat_labels_threshold
         self.unseen_labels          = unseen_labels
+        self.target_column          = target_column
+        self.ML_task                = ML_task
+
+        if ML_task is not None and target_column is None:
+            warnings.warn('The target column is not specified.')
+        if target_column is not None and ML_task is None:
+            warnings.warn('The Machine Learning task is not specified.')
+        if target_column is not None:
+            self.excluded_col.append(target_column)
 
         self._infer_feature_types(data)
         self.datetime_transformer   = DatetimeTransformer(self)
@@ -158,6 +173,16 @@ class Preprocessor:
         if len(self.categorical_features) > 0:
             self.categorical_transformer = CategoricalTransformer(data, self)
 
+        match ML_task:
+            case "classification":
+                self.target_col_encoder = LabelEncoder()
+                self.target_col_encoder.fit(data.select(pl.col(target_column)).collect().to_series())
+            case "regression":
+                self.target_col_encoder = [data.select(pl.col(target_column)).min().collect(), 
+                                           data.select(pl.col(target_column)).max().collect()]
+            case None:
+                pass
+            
     def _infer_feature_types(
             self, 
             data: pl.LazyFrame
@@ -299,7 +324,7 @@ class Preprocessor:
         self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
-        self.time_features    = tuple(set(self.time_features)    - set(self.discarded_features))
+        self.time_features        = tuple(set(self.time_features)        - set(self.discarded_features))
     
     def transform(
             self, 
@@ -397,6 +422,18 @@ class Preprocessor:
         
         if isinstance(data, pl.LazyFrame):
             data = data.collect()
+
+        # Handling the target column
+        match self.ML_task:
+            case "classification":
+                y_encoded = self.target_col_encoder.transform(data.select(pl.col(self.target_column)).to_series())
+                data = data.with_columns(pl.Series(y_encoded).alias(self.target_column))
+            case "regression":
+                col_min = self.target_col_encoder[0][self.target_column].item()
+                col_max = self.target_col_encoder[1][self.target_column].item()
+                data = data.with_columns((pl.col(self.target_column) - col_min) / (col_max - col_min))
+            case None:
+                pass
         
         if self.data_was_pd:
             data = data.to_pandas()   
@@ -466,7 +503,16 @@ class Preprocessor:
             data = self.numerical_transformer.inverse_transform(data)
         if len(self.categorical_features)>0:
             data = self.categorical_transformer.inverse_transform(data)
-            
+        if self.target_column is not None:
+            match self.ML_task:
+                case "classification":
+                    y_original = self.target_col_encoder.inverse_transform(data.select(pl.col(self.target_column)).to_series())
+                    data = data.with_columns(pl.Series(y_original).alias(self.target_column))
+                case "regression":
+                    col_min = self.numerical_parameters[0][self.target_column].item()
+                    col_max = self.numerical_parameters[1][self.target_column].item()
+                    data = data.with_columns(pl.col(self.target_column) * (col_max - col_min) + col_min)
+                
         if self.data_was_pd:
             data = data.to_pandas()        
         return data
@@ -594,10 +640,14 @@ if __name__=="__main__":
     # real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
 
     # Time series
-    file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
-    path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
-    real_data = pl.read_csv(path)
+    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
+    # path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
+    # real_data = pl.read_csv(path)
 
-    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', time="date", scaling='normalize')
+    file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tests/resources/uci_adult_dataset"
+    real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
+    # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
+
+    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='normalize', ML_task = "classification",target_column="income")
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
