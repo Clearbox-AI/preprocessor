@@ -125,7 +125,7 @@ class Preprocessor:
             raise ValueError("Invalid value for cat_labels_threshold")
         if ml_task not in self.ML_TASKS:
             raise ValueError("Invalid value for ml_task")
-        if target_column not in data.columns:
+        if target_column is not None and target_column not in data.columns:
             raise ValueError("The target column is not present in the dataset")
         for col in excluded_col:
             if col not in data.columns:
@@ -430,17 +430,18 @@ class Preprocessor:
             data = data.collect()
 
         # Handling the target column
-        match self.ml_task:
-            case "classification":
-                y_encoded = self.target_col_encoder.transform(data.select(pl.col(self.target_column)).to_series())
-                data = data.with_columns(pl.Series(y_encoded).alias(self.target_column))
-            case "regression":
-                col_min = self.target_col_encoder[0][self.target_column].item()
-                col_max = self.target_col_encoder[1][self.target_column].item()
-                data = data.with_columns((pl.col(self.target_column) - col_min) / (col_max - col_min))
-            case None:
-                pass
-        
+        if self.target_column is not None:
+            match self.ml_task:
+                case "classification":
+                    y_encoded = self.target_col_encoder.transform(data.select(pl.col(self.target_column)).to_series())
+                    data = data.with_columns(pl.Series(y_encoded).alias(self.target_column))
+                case "regression":
+                    col_min = self.target_col_encoder[0][self.target_column].item()
+                    col_max = self.target_col_encoder[1][self.target_column].item()
+                    data = data.with_columns((pl.col(self.target_column) - col_min) / (col_max - col_min))
+                case None:
+                    pass
+            
         if self.data_was_pd:
             data = data.to_pandas()   
             
