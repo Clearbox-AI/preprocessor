@@ -36,14 +36,6 @@ class Preprocessor:
 
         For instance, if ``cat_labels_threshold=0.02`` and a label appears less than 2% in the dataset, that label will be converted to `"other"`.
 
-    get_discarded_info : bool, optional, default=False
-        If set to ``True``, the preprocessor will feature the method ``get_discarded_features_reason``,
-        which provides information on which columns were discarded and the reason for discarding.
-        Note that enabling this option may significantly slow down the processing operation.
-        The list of discarded columns is available even when `get_discarded_info=False`, so consider
-        setting this flag to ``True`` only if you need to know why a column was discarded or, in the case
-        of columns containing only one unique value, what that value was.
-
     excluded_col : List, optional, default=[]
         A list of column names to be excluded from processing. These columns will be returned in the
         final DataFrame without being modified.
@@ -118,7 +110,6 @@ class Preprocessor:
             self, 
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame, 
             cat_labels_threshold: float = 0.02,
-            get_discarded_info: bool = False,
             excluded_col: List = [],
             time: str = None,
             missing_values_threshold: float = 0.999,
@@ -126,7 +117,7 @@ class Preprocessor:
             scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
             num_fill_null : Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "mean",
             unseen_labels = 'ignore',
-            ml_task: Literal["classification", "regression"] = None,
+            ml_task: Literal["classification", "regression"] = "classification",
             target_column: str = None,
         ):
         # Argument values check
@@ -156,7 +147,6 @@ class Preprocessor:
 
         self.discarded_info         = []
         self.missing_threshold      = missing_values_threshold
-        self.get_discarded_info     = get_discarded_info
         self.excluded_col           = excluded_col
         self.time                   = time
         self.n_bins_labels          = None
@@ -320,8 +310,6 @@ class Preprocessor:
                 values_to_shrink_indices = np.where(counts < self.cat_labels_threshold)[0]
                 if values_to_shrink_indices.shape[0] > 0 and column_stats[1].shape[0] > 2:
                     too_much_info[column_stats[0]] = [column_stats[1][column_stats[0]].to_list()[i] for i in values_to_shrink_indices]
-                    warning_message = f"\nThe following rare labels of column {column_stats[0]} were aggregated:\n    {too_much_info[column_stats[0]]}"
-                    warnings.warn(warning_message)
 
         # Numerical features
         for column_stats in ord_features_stats:
@@ -332,6 +320,9 @@ class Preprocessor:
                 self.discarded_features.append(column_stats[0])
                 self.discarded_info.append(warning_message)
 
+        if len(too_much_info)>0:
+            warnings.warn(f"Some rare labels have been aggregated into the 'other' category. You can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter (now set to {self.cat_labels_threshold}), but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.")
+
         data = self._shrink_labels(data, too_much_info)
         self.discarded = (no_info, too_much_info)
 
@@ -339,7 +330,7 @@ class Preprocessor:
         self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
-        self.datetime_features        = tuple(set(self.datetime_features)        - set(self.discarded_features))
+        self.datetime_features    = tuple(set(self.datetime_features)    - set(self.discarded_features))
     
     def transform(
             self, 
@@ -663,6 +654,6 @@ if __name__=="__main__":
     real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
     # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
 
-    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='normalize', ml_task = "classification",target_column="income")
+    preprocessor            = Preprocessor(real_data, num_fill_null='forward', scaling='normalize', ml_task = "classification",target_column="income")
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)

@@ -11,10 +11,10 @@ with open("requirements.txt") as f:
 
 setup(
     name="clearbox-preprocessor",  
-    version="0.11.5",  
+    version="0.11.6",  
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
-    description="A polars based preprocessor for ML datasets",
+    description="A fast polars based data pre-processor for ML datasets",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Clearbox-AI/preprocessor",  # Replace with your GitHub repository URL
