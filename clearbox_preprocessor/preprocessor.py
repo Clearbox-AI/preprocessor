@@ -16,7 +16,7 @@ from .utils.categorical_transformer import CategoricalTransformer
 from .utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
-    ML_TASKS = {"classification", "regression"}
+    ML_TASKS = {"classification", "regression", None}
     NUM_FILL_NULL_STRATEGIES = {"interpolate","forward", "backward", "min", "max", "mean", "zero", "one"}
     SCALING_STRATEGIES = {"none", "normalize", "standardize", "quantile"}
     """
@@ -117,7 +117,7 @@ class Preprocessor:
             scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
             num_fill_null : Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "mean",
             unseen_labels = 'ignore',
-            ml_task: Literal["classification", "regression"] = "classification",
+            ml_task: Literal["classification", "regression", None] = None,
             target_column: str = None,
         ):
         # Argument values check
@@ -159,9 +159,9 @@ class Preprocessor:
         self.ml_task                = ml_task
 
         if ml_task is not None and target_column is None:
-            warnings.warn('The target column is not specified.')
+            warnings.warn('The Machine Learning task was specified but the target column was not specified.')
         if target_column is not None and ml_task is None:
-            warnings.warn('The Machine Learning task is not specified.')
+            warnings.warn('The target column was not specified but the Machine Learning task was not specified.')
         if target_column is not None:
             self.excluded_col.append(target_column)
 
@@ -178,15 +178,16 @@ class Preprocessor:
         if len(self.categorical_features) > 0:
             self.categorical_transformer = CategoricalTransformer(data, self)
 
-        match ml_task:
-            case "classification":
-                self.target_col_encoder = LabelEncoder()
-                self.target_col_encoder.fit(data.select(pl.col(target_column)).collect().to_series())
-            case "regression":
-                self.target_col_encoder = [data.select(pl.col(target_column)).min().collect(), 
-                                           data.select(pl.col(target_column)).max().collect()]
-            case None:
-                pass
+        if target_column is not None:
+            match ml_task:
+                case "classification":
+                    self.target_col_encoder = LabelEncoder()
+                    self.target_col_encoder.fit(data.select(pl.col(target_column)).collect().to_series())
+                case "regression":
+                    self.target_col_encoder = [data.select(pl.col(target_column)).min().collect(), 
+                                            data.select(pl.col(target_column)).max().collect()]
+                case None:
+                    pass
             
     def _infer_feature_types(
             self, 
@@ -399,7 +400,7 @@ class Preprocessor:
         # Convert time columns to timestamp integers, fill null values by linear interpolation and scale time columns
         if len(self.datetime_features)>0:
             data = self.datetime_transformer.transform(data, self.time)
-            if self.time not in self.datetime_transformer.datetime_formats.keys():
+            if self.time is not None and self.time not in self.datetime_transformer.datetime_formats.keys():
                 warnings.warn(f"The time column specified '{self.time}' was not detected as datetime type", UserWarning)
 
         # Numerical features processing
@@ -647,14 +648,14 @@ if __name__=="__main__":
     # real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
 
     # Time series
-    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
-    # path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
-    # real_data = pl.read_csv(path)
+    file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
+    path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
+    real_data = pl.read_csv(path)
 
-    file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tests/resources/uci_adult_dataset"
-    real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
-    # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
+    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tests/resources/uci_adult_dataset"
+    # real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
+    # # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
 
-    preprocessor            = Preprocessor(real_data, num_fill_null='forward', scaling='normalize', ml_task = "classification",target_column="income")
+    preprocessor            = Preprocessor(real_data, num_fill_null='forward', scaling='normalize')
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
