@@ -88,14 +88,11 @@ class DatetimeTransformer():
                                     data.select(self.datetime_features).std()] 
         return data.lazy()
     
-    def transform(self, data, time=None):
+    def transform(self, data):
         if isinstance(data, pl.LazyFrame):
             data = data.collect()
         
-        if time is not None:
-            data = data.sort(time)
-        else:
-            data = data.sort(list(self.datetime_formats.keys())[0])
+        data = data.sort(list(self.datetime_formats.keys())[0])
         data = self._infer_and_convert_time_columns(data) # Returns data with time columns converted to integers
         data = data.with_columns(pl.col(self.datetime_features).interpolate()) # Linear interpolation
 

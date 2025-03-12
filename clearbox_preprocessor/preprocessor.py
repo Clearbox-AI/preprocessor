@@ -40,8 +40,8 @@ class Preprocessor:
         A list of column names to be excluded from processing. These columns will be returned in the
         final DataFrame without being modified.
 
-    time : str, optional, default=None
-        The name of the time column to sort the DataFrame in case of time series data.
+    time_id : str, optional, default=None
+        The time series index. It identifies unique time series events.
 
     scaling : str, default="none"
         The method used to scale numerical features:
@@ -111,7 +111,7 @@ class Preprocessor:
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame, 
             cat_labels_threshold: float = 0.02,
             excluded_col: List = [],
-            time: str = None,
+            time_id: str = None,
             missing_values_threshold: float = 0.999,
             n_bins: int = 0,
             scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
@@ -148,7 +148,7 @@ class Preprocessor:
         self.discarded_info         = []
         self.missing_threshold      = missing_values_threshold
         self.excluded_col           = excluded_col
-        self.time                   = time
+        self.time_id                = time_id
         self.n_bins_labels          = None
         self.n_bins                 = n_bins
         self.num_fill_null          = num_fill_null
@@ -399,10 +399,8 @@ class Preprocessor:
         # Time features processing
         # Convert time columns to timestamp integers, fill null values by linear interpolation and scale time columns
         if len(self.datetime_features)>0:
-            data = self.datetime_transformer.transform(data, self.time)
-            if self.time is not None and self.time not in self.datetime_transformer.datetime_formats.keys():
-                warnings.warn(f"The time column specified '{self.time}' was not detected as datetime type", UserWarning)
-
+            data = self.datetime_transformer.transform(data)
+            
         # Numerical features processing
         # Fill Null values with the selcted strategy or value (default: "mean")
         # Scale numerical features if scaling parameter was specified
