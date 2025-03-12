@@ -16,6 +16,9 @@ from .utils.categorical_transformer import CategoricalTransformer
 from .utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
+    ML_TASKS = {"classification", "regression"}
+    NUM_FILL_NULL_STRATEGIES = {"interpolate","forward", "backward", "min", "max", "mean", "zero", "one"}
+    SCALING_STRATEGIES = {"none", "normalize", "standardize", "quantile"}
     """
     A class for preprocessing datasets based on polars, including feature selection, handling missing values, scaling, 
     and time-series feature extraction.
@@ -79,7 +82,7 @@ class Preprocessor:
         - "ignore"        : If new data contains labels unseen during fit one hot encoding contains 0 in every column.
         - "error"         : Raise an error if new data contains labels unseen during fit.
 
-    ML_task : ["classification", "regression"], default=None
+    ml_task : ["classification", "regression"], default=None
         The Machie Learning task the dataset is used for. It can be either classification or regression.
 
     target_column : str, default=None
@@ -93,7 +96,7 @@ class Preprocessor:
     categorical_features : Tuple[str]
         Names of the categorical features in the dataset.
 
-    time_features : Tuple[str]
+    datetime_features : Tuple[str]
         Names of the time features in the dataset.
 
     discarded_features : Union[List[str], Dict[str, str]]
@@ -123,9 +126,24 @@ class Preprocessor:
             scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
             num_fill_null : Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "mean",
             unseen_labels = 'ignore',
-            ML_task: Literal["classification", "regression"] = None,
+            ml_task: Literal["classification", "regression"] = None,
             target_column: str = None,
         ):
+        # Argument values check
+        if cat_labels_threshold>1 or cat_labels_threshold<0:
+            raise ValueError("Invalid value for cat_labels_threshold")
+        if ml_task not in self.ML_TASKS:
+            raise ValueError("Invalid value for ml_task")
+        if target_column not in data.columns:
+            raise ValueError("The target column is not present in the dataset")
+        for col in excluded_col:
+            if col not in data.columns:
+                raise ValueError(f"The excluded column {col} is not present in the dataset")
+        if scaling not in self.SCALING_STRATEGIES:
+            raise ValueError("Invalid value for scaling")
+        if num_fill_null not in self.NUM_FILL_NULL_STRATEGIES:
+            raise ValueError("Invalid value for num_fill_null")
+        
         # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
         if isinstance(data, pd.DataFrame):
             self.data_was_pd = True
@@ -136,9 +154,6 @@ class Preprocessor:
         else:
             self.data_was_pd = False
 
-        if cat_labels_threshold>1 or cat_labels_threshold<0:
-            raise ValueError("Invalid value for cat_labels_threshold")
-    
         self.discarded_info         = []
         self.missing_threshold      = missing_values_threshold
         self.get_discarded_info     = get_discarded_info
@@ -151,11 +166,11 @@ class Preprocessor:
         self.cat_labels_threshold   = cat_labels_threshold
         self.unseen_labels          = unseen_labels
         self.target_column          = target_column
-        self.ML_task                = ML_task
+        self.ml_task                = ml_task
 
-        if ML_task is not None and target_column is None:
+        if ml_task is not None and target_column is None:
             warnings.warn('The target column is not specified.')
-        if target_column is not None and ML_task is None:
+        if target_column is not None and ml_task is None:
             warnings.warn('The Machine Learning task is not specified.')
         if target_column is not None:
             self.excluded_col.append(target_column)
@@ -163,8 +178,8 @@ class Preprocessor:
         self._infer_feature_types(data)
         self.datetime_transformer   = DatetimeTransformer(self)
         data                        = self.datetime_transformer.fit(data.collect()) # Return data with time columns transformed into timestamp integer
-        self.time_features          = self.datetime_transformer.time_features
-        self.categorical_features   = tuple(set(self.categorical_features) - set(self.time_features))
+        self.datetime_features          = self.datetime_transformer.datetime_features
+        self.categorical_features   = tuple(set(self.categorical_features) - set(self.datetime_features))
         self._feature_selection(data)
 
         # Initialization of NumericalTransformer and CategoricalTransformer
@@ -173,7 +188,7 @@ class Preprocessor:
         if len(self.categorical_features) > 0:
             self.categorical_transformer = CategoricalTransformer(data, self)
 
-        match ML_task:
+        match ml_task:
             case "classification":
                 self.target_col_encoder = LabelEncoder()
                 self.target_col_encoder.fit(data.select(pl.col(target_column)).collect().to_series())
@@ -197,9 +212,9 @@ class Preprocessor:
         boolean_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype == pl.Boolean]
         self.boolean_features = tuple(set(boolean_columns) - set(self.excluded_col))
 
-        # Store the names of time columns into 'time_features'
-        time_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Date, pl.Datetime)]
-        self.time_features = tuple(set(time_columns) - set(self.excluded_col))
+        # Store the names of time columns into 'datetime_features'
+        datetime_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Date, pl.Datetime)]
+        self.datetime_features = tuple(set(datetime_columns) - set(self.excluded_col))
 
         # Store the names of numerical columns into 'numerical_features'
         numerical_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype in (pl.Int64, pl.Float64)]
@@ -320,11 +335,11 @@ class Preprocessor:
         data = self._shrink_labels(data, too_much_info)
         self.discarded = (no_info, too_much_info)
 
-        # Update the numerical_features, categorical_features and time_features lists removing the discarded columns
+        # Update the numerical_features, categorical_features and datetime_features lists removing the discarded columns
         self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
-        self.time_features        = tuple(set(self.time_features)        - set(self.discarded_features))
+        self.datetime_features        = tuple(set(self.datetime_features)        - set(self.discarded_features))
     
     def transform(
             self, 
@@ -391,7 +406,7 @@ class Preprocessor:
 
         # Time features processing
         # Convert time columns to timestamp integers, fill null values by linear interpolation and scale time columns
-        if len(self.time_features)>0:
+        if len(self.datetime_features)>0:
             data = self.datetime_transformer.transform(data, self.time)
             if self.time not in self.datetime_transformer.datetime_formats.keys():
                 warnings.warn(f"The time column specified '{self.time}' was not detected as datetime type", UserWarning)
@@ -424,7 +439,7 @@ class Preprocessor:
             data = data.collect()
 
         # Handling the target column
-        match self.ML_task:
+        match self.ml_task:
             case "classification":
                 y_encoded = self.target_col_encoder.transform(data.select(pl.col(self.target_column)).to_series())
                 data = data.with_columns(pl.Series(y_encoded).alias(self.target_column))
@@ -497,14 +512,14 @@ class Preprocessor:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
 
         # Inverse transofmration of numerical and categorical features
-        if len(self.time_features)>0:
+        if len(self.datetime_features)>0:
             data = self.datetime_transformer.inverse_transform(data)
         if len(self.numerical_features)>0:
             data = self.numerical_transformer.inverse_transform(data)
         if len(self.categorical_features)>0:
             data = self.categorical_transformer.inverse_transform(data)
         if self.target_column is not None:
-            match self.ML_task:
+            match self.ml_task:
                 case "classification":
                     y_original = self.target_col_encoder.inverse_transform(data.select(pl.col(self.target_column)).to_series())
                     data = data.with_columns(pl.Series(y_original).alias(self.target_column))
@@ -648,6 +663,6 @@ if __name__=="__main__":
     real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
     # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
 
-    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='normalize', ML_task = "classification",target_column="income")
+    preprocessor            = Preprocessor(real_data, get_discarded_info=False, num_fill_null='forward', scaling='normalize', ml_task = "classification",target_column="income")
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
