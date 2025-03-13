@@ -22,16 +22,18 @@ class DatetimeTransformer():
 
     def _try_convert_to_datetime(self, df, col):
         datetime_formats_to_dtype = {
-            "%Y-%m-%d %H:%M:%S": pl.Datetime,
-            "%Y-%m-%dT%H:%M:%S": pl.Datetime,
-            "%Y-%m-%d %H:%M"   : pl.Datetime,
-            "%Y-%m-%d"         : pl.Date,
-            "%d/%m/%Y"         : pl.Date,
-            "%Y-%m"            : pl.Date,
-            "%Y"               : pl.Date,
-            "%H:%M:%S"         : pl.Time,
-            "%H:%M"            : pl.Time,
-            "%H"               : pl.Time
+            "%Y-%m-%d %H:%M:%S.%f": pl.Datetime,
+            "%Y-%m-%d %H:%M:%S"   : pl.Datetime,
+            "%Y-%m-%dT%H:%M:%S.%f": pl.Datetime,
+            "%Y-%m-%dT%H:%M:%S"   : pl.Datetime,
+            "%Y-%m-%d %H:%M"      : pl.Datetime,
+            "%Y-%m-%d"            : pl.Date,
+            "%d/%m/%Y"            : pl.Date,
+            "%Y-%m"               : pl.Date,
+            "%Y"                  : pl.Date,
+            "%H:%M:%S"            : pl.Time,
+            "%H:%M"               : pl.Time,
+            "%H"                  : pl.Time
         }
         for fmt, dtype in datetime_formats_to_dtype.items():
             try:
@@ -92,7 +94,7 @@ class DatetimeTransformer():
         if isinstance(data, pl.LazyFrame):
             data = data.collect()
         
-        data = data.sort(list(self.datetime_formats.keys())[0])
+        data = data.sort(self.datetime_features[0])
         data = self._infer_and_convert_time_columns(data) # Returns data with time columns converted to integers
         data = data.with_columns(pl.col(self.datetime_features).interpolate()) # Linear interpolation
 

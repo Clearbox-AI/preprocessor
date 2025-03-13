@@ -11,9 +11,12 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-from .utils.numerical_transformer import NumericalTransformer
-from .utils.categorical_transformer import CategoricalTransformer
-from .utils.datetime_transformer import DatetimeTransformer
+# from .utils.numerical_transformer import NumericalTransformer
+# from .utils.categorical_transformer import CategoricalTransformer
+# from .utils.datetime_transformer import DatetimeTransformer
+from utils.numerical_transformer import NumericalTransformer
+from utils.categorical_transformer import CategoricalTransformer
+from utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
@@ -322,7 +325,7 @@ class Preprocessor:
                 self.discarded_info.append(warning_message)
 
         if len(too_much_info)>0:
-            warnings.warn(f"Some rare labels have been aggregated into the 'other' category. You can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter (now set to {self.cat_labels_threshold}), but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.")
+            warnings.warn(f"Some rare labels have been aggregated into the 'other' category. You can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter, but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.")
 
         data = self._shrink_labels(data, too_much_info)
         self.discarded = (no_info, too_much_info)
@@ -646,14 +649,16 @@ if __name__=="__main__":
     # real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
 
     # Time series
-    file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
-    path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
-    real_data = pl.read_csv(path)
+    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
+    # path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
+    # real_data = pl.read_csv(path)
+
+    real_data= pd.read_csv('MEP/MEP_Pettinari_2024W37.csv')
 
     # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tests/resources/uci_adult_dataset"
     # real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
     # # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
 
-    preprocessor            = Preprocessor(real_data, num_fill_null='forward', scaling='normalize')
+    preprocessor            = Preprocessor(real_data, num_fill_null='forward', scaling='standardize')
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)

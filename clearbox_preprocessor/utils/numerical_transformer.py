@@ -96,7 +96,7 @@ class NumericalTransformer:
                     col_std  = self.numerical_parameters[1][col].item()
                     data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
             case "quantile": 
-                num_data = pl.DataFrame(self.scaler.transform(data.select(numerical_features).collect()),
+                num_data = pl.DataFrame(self.scaler.transform(data.select(numerical_features)),
                                         schema = self.numerical_features)
                 for col in num_data.columns:
                     data = data.with_columns(num_data[col].alias(col))
