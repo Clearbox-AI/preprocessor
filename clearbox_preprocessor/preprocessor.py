@@ -137,7 +137,7 @@ class Preprocessor:
                 raise ValueError(f"The excluded column {col} is not present in the dataset")
         if scaling not in self.SCALING_STRATEGIES:
             raise ValueError("Invalid value for scaling")
-        if num_fill_null not in self.NUM_FILL_NULL_STRATEGIES:
+        if num_fill_null not in self.NUM_FILL_NULL_STRATEGIES and not isinstance(num_fill_null, (int, float)):
             raise ValueError("Invalid value for num_fill_null")
         
         # Transform data from Pandas or Polars DataFrame to Polars LazyFrame
@@ -644,6 +644,7 @@ if __name__=="__main__":
     #######################################################################################################
     import os
     import pandas as pd
+    import numpy as np
     import polars as pl
 
     # Tabular data
@@ -661,6 +662,6 @@ if __name__=="__main__":
     # real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
     # # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
 
-    preprocessor            = Preprocessor(real_data, num_fill_null='forward', scaling='standardize')
+    preprocessor            = Preprocessor(real_data, num_fill_null=np.nan, scaling='standardize')
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
