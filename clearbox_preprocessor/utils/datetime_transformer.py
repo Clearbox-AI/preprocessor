@@ -22,9 +22,9 @@ class DatetimeTransformer():
 
     def _try_convert_to_datetime(self, df, col):
         datetime_formats_to_dtype = {
-            "%Y-%m-%d %H:%M:%S.%f": pl.Datetime,
+            "%Y-%m-%d %H:%M:%S%.f": pl.Datetime,
             "%Y-%m-%d %H:%M:%S"   : pl.Datetime,
-            "%Y-%m-%dT%H:%M:%S.%f": pl.Datetime,
+            "%Y-%m-%dT%H:%M:%S%.f": pl.Datetime,
             "%Y-%m-%dT%H:%M:%S"   : pl.Datetime,
             "%Y-%m-%d %H:%M"      : pl.Datetime,
             "%Y-%m-%d"            : pl.Date,
