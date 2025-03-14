@@ -11,14 +11,14 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-from .utils.numerical_transformer import NumericalTransformer
-from .utils.categorical_transformer import CategoricalTransformer
-from .utils.datetime_transformer import DatetimeTransformer
+# from .utils.numerical_transformer import NumericalTransformer
+# from .utils.categorical_transformer import CategoricalTransformer
+# from .utils.datetime_transformer import DatetimeTransformer
 
 # UNCOMMENT FOR DEBUGGING
-# from utils.numerical_transformer import NumericalTransformer
-# from utils.categorical_transformer import CategoricalTransformer
-# from utils.datetime_transformer import DatetimeTransformer
+from utils.numerical_transformer import NumericalTransformer
+from utils.categorical_transformer import CategoricalTransformer
+from utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
@@ -657,12 +657,11 @@ if __name__=="__main__":
     # real_data = pl.read_csv(path)
 
     real_data= pd.read_csv('MEP/MEP_Pettinari_2024W37.csv')
-
     # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tests/resources/uci_adult_dataset"
     # real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
     # # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
 
-    preprocessor            = Preprocessor(real_data, num_fill_null="none", scaling='quantile')
+    preprocessor            = Preprocessor(real_data, num_fill_null="none", scaling='standardize')
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
     pass

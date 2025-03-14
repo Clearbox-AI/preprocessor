@@ -101,13 +101,13 @@ class NumericalTransformer:
                 data = data.with_columns(col_num).interpolate()
             elif num_fill_null == "none":
                 if scaling in ["quantile", "normalize"]:
-                    data = data.with_columns(col_num.fill_null(-0.01))
+                    data = data.with_columns(col_num.fill_null(-0.01).fill_nan(-0.01))
                 else:
-                    data = data.with_columns(col_num.fill_null(-10))
+                    data = data.with_columns(col_num.fill_null(-10).fill_nan(-10))
             else:
-                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
+                data = data.with_columns(col_num.fill_null(strategy=num_fill_null).fill_nan(strategy=num_fill_null))
         else:
-            data = data.with_columns(col_num.fill_null(num_fill_null))
+            data = data.with_columns(col_num.fill_null(num_fill_null).fill_nana(num_fill_null))
 
         return data
 
@@ -153,7 +153,7 @@ class NumericalTransformer:
             else:
                 for col in numerical_features:
                     data = data.with_columns(
-                        pl.when(pl.col(col) <= -10)
+                        pl.when(pl.col(col) <= -8)
                         .then(None)
                         .otherwise(pl.col(col))
                         .alias(col)
