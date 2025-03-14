@@ -69,16 +69,6 @@ class NumericalTransformer:
         numerical_features = self.numerical_features
         num_fill_null = self.num_fill_null
 
-        # Fill null values with the specified strategy
-        col_num = pl.col(numerical_features)
-        if isinstance(num_fill_null, str):
-            if num_fill_null == "interpolate":
-                data = data.with_columns(col_num).interpolate()
-            else:
-                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
-        else:
-            data = data.with_columns(col_num.fill_null(num_fill_null))
-
         # Scale numerical features with the specified method
         match scaling:
             case "none":
@@ -103,6 +93,21 @@ class NumericalTransformer:
             case "kbins":
                 # KBinsDiscretizer applied to numerical features
                 data = data.with_columns(numerical_features.qcut(self.n_bins, labels=self.n_bins_labels))
+
+        # Fill null values with the specified strategy
+        col_num = pl.col(numerical_features)
+        if isinstance(num_fill_null, str):
+            if num_fill_null == "interpolate":
+                data = data.with_columns(col_num).interpolate()
+            elif num_fill_null == "none":
+                if scaling in ["quantile", "normalize"]:
+                    data = data.with_columns(col_num.fill_null(-0.01))
+                else:
+                    data = data.with_columns(col_num.fill_null(-10))
+            else:
+                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
+        else:
+            data = data.with_columns(col_num.fill_null(num_fill_null))
 
         return data
 
@@ -132,7 +137,28 @@ class NumericalTransformer:
             If an invalid scaling method is provided.
         """
         numerical_features  = self.numerical_features
-        
+        num_fill_null = self.num_fill_null
+        scaling = self.scaling
+
+        # If num_fill_null is "none", convert very negative values to NaN
+        if num_fill_null=="none":
+            if scaling in ["quantile", "normalize"]:
+                for col in numerical_features:
+                    data = data.with_columns(
+                        pl.when(pl.col(col) <= -0.01)
+                        .then(None)
+                        .otherwise(pl.col(col))
+                        .alias(col)
+                    )
+            else:
+                for col in numerical_features:
+                    data = data.with_columns(
+                        pl.when(pl.col(col) <= -10)
+                        .then(None)
+                        .otherwise(pl.col(col))
+                        .alias(col)
+                    )
+
         # Numerical features
         match self.scaling:
             case "none":

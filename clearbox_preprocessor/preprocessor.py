@@ -11,18 +11,18 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-from .utils.numerical_transformer import NumericalTransformer
-from .utils.categorical_transformer import CategoricalTransformer
-from .utils.datetime_transformer import DatetimeTransformer
+# from .utils.numerical_transformer import NumericalTransformer
+# from .utils.categorical_transformer import CategoricalTransformer
+# from .utils.datetime_transformer import DatetimeTransformer
 
 # UNCOMMENT FOR DEBUGGING
-# from utils.numerical_transformer import NumericalTransformer
-# from utils.categorical_transformer import CategoricalTransformer
-# from utils.datetime_transformer import DatetimeTransformer
+from utils.numerical_transformer import NumericalTransformer
+from utils.categorical_transformer import CategoricalTransformer
+from utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
-    NUM_FILL_NULL_STRATEGIES = {"interpolate","forward", "backward", "min", "max", "mean", "zero", "one"}
+    NUM_FILL_NULL_STRATEGIES = {"none", "interpolate","forward", "backward", "min", "max", "mean", "zero", "one"}
     SCALING_STRATEGIES = {"none", "normalize", "standardize", "quantile"}
     """
     A class for preprocessing datasets based on polars, including feature selection, handling missing values, scaling, 
@@ -120,7 +120,7 @@ class Preprocessor:
             missing_values_threshold: float = 0.999,
             n_bins: int = 0,
             scaling: Literal["none", "normalize", "standardize", "quantile"] = "none", 
-            num_fill_null : Literal["interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "mean",
+            num_fill_null : Literal["none", "interpolate","forward", "backward", "min", "max", "mean", "zero", "one"] = "none",
             unseen_labels = 'ignore',
             ml_task: Literal["classification", "regression", None] = None,
             target_column: str = None,
@@ -662,6 +662,7 @@ if __name__=="__main__":
     # real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
     # # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
 
-    preprocessor            = Preprocessor(real_data, num_fill_null=np.nan, scaling='standardize')
+    preprocessor            = Preprocessor(real_data, num_fill_null="none", scaling='quantile')
     real_data_preprocessed  = preprocessor.transform(real_data)
     df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
+    pass
