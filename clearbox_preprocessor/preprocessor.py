@@ -16,9 +16,9 @@ import numpy as np
 # from .utils.datetime_transformer import DatetimeTransformer
 
 # UNCOMMENT FOR DEBUGGING
-from utils.numerical_transformer import NumericalTransformer
-from utils.categorical_transformer import CategoricalTransformer
-from utils.datetime_transformer import DatetimeTransformer
+from .utils.numerical_transformer import NumericalTransformer
+from .utils.categorical_transformer import CategoricalTransformer
+from .utils.datetime_transformer import DatetimeTransformer
 
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
