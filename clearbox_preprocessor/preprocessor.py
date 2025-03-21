@@ -5,7 +5,7 @@ import polars as pl
 import polars.selectors as cs
 from sklearn.preprocessing import LabelEncoder
 
-from tsfresh import extract_relevant_features
+from tsfresh import extract_relevant_features, extract_features
 
 from typing import List, Tuple, Literal, Dict
 import warnings
@@ -23,7 +23,7 @@ from .utils.datetime_transformer import DatetimeTransformer
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
     NUM_FILL_NULL_STRATEGIES = {"none", "interpolate","forward", "backward", "min", "max", "mean", "zero", "one"}
-    SCALING_STRATEGIES = {"none", "normalize", "standardize", "quantile"}
+    SCALING_STRATEGIES = {"none", "normalize", "standardize", "quantile", "kbins"}
     """
     A class for preprocessing datasets based on polars, including feature selection, handling missing values, scaling, 
     and time-series feature extraction.
@@ -128,6 +128,8 @@ class Preprocessor:
         # Argument values check
         if cat_labels_threshold>1 or cat_labels_threshold<0:
             raise ValueError("Invalid value for cat_labels_threshold")
+        if missing_values_threshold > 1 or missing_values_threshold < 0:
+            raise ValueError("Invalid value for missing_values_threshold")
         if ml_task not in self.ML_TASKS:
             raise ValueError("Invalid value for ml_task")
         if target_column is not None and target_column not in data.columns:
@@ -184,15 +186,16 @@ class Preprocessor:
             self.categorical_transformer = CategoricalTransformer(data, self)
 
         if target_column is not None:
-            match ml_task:
-                case "classification":
-                    self.target_col_encoder = LabelEncoder()
-                    self.target_col_encoder.fit(data.select(pl.col(target_column)).collect().to_series())
-                case "regression":
-                    self.target_col_encoder = [data.select(pl.col(target_column)).min().collect(), 
-                                            data.select(pl.col(target_column)).max().collect()]
-                case None:
-                    pass
+            if ml_task == "classification":
+                self.target_col_encoder = LabelEncoder()
+                self.target_col_encoder.fit(data.select(pl.col(target_column)).collect().to_series())
+            elif ml_task == "regression":
+                self.target_col_encoder = [data.select(pl.col(target_column)).min().collect(), 
+                                        data.select(pl.col(target_column)).max().collect()]
+            elif ml_task is None:
+                pass
+            else:
+                raise ValueError(f"Unsupported ml_task: {ml_task}")
             
     def _infer_feature_types(
             self, 
@@ -378,6 +381,11 @@ class Preprocessor:
             preprocessor = Preprocessor(real_data, scaling="standardize")
             transformed_data = preprocessor.transform(real_data)
         """
+        # Check data type compatibility
+        data_is_pd = isinstance(data, pd.DataFrame)
+        if data_is_pd != self.data_was_pd:
+            sys.exit(f'Type mismatch: Preprocessor was initialized with {"pandas" if self.data_was_pd else "polars"} DataFrame but transform was called with {"pandas" if data_is_pd else "polars"} DataFrame')
+
         # Transform data from Pandas.DataFrame or Polars.DataFrame to Polars.LazyFrame
         if isinstance(data, pd.DataFrame):
             data = pl.from_pandas(data).lazy()
@@ -435,16 +443,17 @@ class Preprocessor:
 
         # Handling the target column
         if self.target_column is not None:
-            match self.ml_task:
-                case "classification":
-                    y_encoded = self.target_col_encoder.transform(data.select(pl.col(self.target_column)).to_series())
-                    data = data.with_columns(pl.Series(y_encoded).alias(self.target_column))
-                case "regression":
-                    col_min = self.target_col_encoder[0][self.target_column].item()
-                    col_max = self.target_col_encoder[1][self.target_column].item()
-                    data = data.with_columns((pl.col(self.target_column) - col_min) / (col_max - col_min))
-                case None:
-                    pass
+            if self.ml_task == "classification":
+                y_encoded = self.target_col_encoder.transform(data.select(pl.col(self.target_column)).to_series())
+                data = data.with_columns(pl.Series(y_encoded).alias(self.target_column))
+            elif self.ml_task == "regression":
+                col_min = self.target_col_encoder[0][self.target_column].item()
+                col_max = self.target_col_encoder[1][self.target_column].item()
+                data = data.with_columns((pl.col(self.target_column) - col_min) / (col_max - col_min))
+            elif self.ml_task is None:
+                pass
+            else:
+                raise ValueError(f"Unsupported ml_task: {self.ml_task}")
             
         if self.data_was_pd:
             data = data.to_pandas()   
@@ -515,15 +524,14 @@ class Preprocessor:
         if len(self.categorical_features)>0:
             data = self.categorical_transformer.inverse_transform(data)
         if self.target_column is not None:
-            match self.ml_task:
-                case "classification":
-                    y_original = self.target_col_encoder.inverse_transform(data.select(pl.col(self.target_column)).to_series())
-                    data = data.with_columns(pl.Series(y_original).alias(self.target_column))
-                case "regression":
-                    col_min = self.numerical_parameters[0][self.target_column].item()
-                    col_max = self.numerical_parameters[1][self.target_column].item()
-                    data = data.with_columns(pl.col(self.target_column) * (col_max - col_min) + col_min)
-                
+            if self.ml_task == "classification":
+                y_original = self.target_col_encoder.inverse_transform(data.select(pl.col(self.target_column)).to_series())
+                data = data.with_columns(pl.Series(y_original).alias(self.target_column))
+            elif self.ml_task == "regression":
+                col_min = self.target_col_encoder[0][self.target_column].item()
+                col_max = self.target_col_encoder[1][self.target_column].item()
+                data = data.with_columns(pl.col(self.target_column) * (col_max - col_min) + col_min)
+            
         if self.data_was_pd:
             data = data.to_pandas()        
         return data
@@ -547,7 +555,7 @@ class Preprocessor:
             The label series associated with the data. It can be a Polars Series or a Pandas Series.
         time : str, optional
             The name of the time column used to sort the data. If not provided, the method 
-            will try to use ``self.time`` if available.
+            will try to use ``self.time_id`` if available.
         column_id : str, optional
             The name of the ID column, if present in the data. This is used to distinguish 
             different time-series within the same dataset.
@@ -564,7 +572,7 @@ class Preprocessor:
         ValueError
             If the provided label series is not a Polars Series or a Pandas Series.
         ValueError
-            If the time column name is not provided and ``self.time`` is not available.
+            If the time column name is not provided and ``self.time_id`` is not available.
 
         Notes
         -----
@@ -572,6 +580,13 @@ class Preprocessor:
         to extract features from the time-series data.
         - The method stores the filtered features in ``self.features_filtered`` for further use.
         """
+        # Check if time column is provided, else fallback to self.time_id if available
+        if time is None:
+            if self.time_id is not None:
+                time = self.time_id
+            else:
+                raise ValueError("Time column name is required for time-series feature extraction.")
+                
         # Transform input dataframe into Pandas.DataFrame
         if isinstance(data, pl.LazyFrame):
             data_pd = data.collect().to_pandas()
@@ -591,15 +606,16 @@ class Preprocessor:
             print("The labels series must be a Polars Series or a Pandas Series")
             return
 
-        if not self.time and not time:
-            print("Please enter a name for the time column")
-            return
-        elif self.time and not time:
-            time = self.time
-        
+        # First try to extract relevant features
         features_filtered = extract_relevant_features(data_pd, y, column_sort=time, column_id=column_id)
         self.features_filtered = features_filtered
         
+        # If no relevant features were found, fall back to extracting all features
+        if features_filtered.shape[1] == 0:
+            # Extract all features without filtering for relevance
+            all_features = extract_features(data_pd, column_sort=time, column_id=column_id)
+            return all_features
+            
         return features_filtered
 
     def get_features_sizes(self) -> Tuple[List[int], List[int]]:
