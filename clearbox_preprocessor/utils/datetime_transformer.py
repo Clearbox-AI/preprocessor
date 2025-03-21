@@ -1,5 +1,4 @@
 import polars as pl
-import dateinfer
 from dateutil.parser import parse
 
 class DatetimeTransformer():
