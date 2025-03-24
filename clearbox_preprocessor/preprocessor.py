@@ -650,34 +650,3 @@ class Preprocessor:
         Return the list of categorical features.
         """
         return self.categorical_features
-
-if __name__=="__main__":
-    #######################################################################################################
-    ## DEBUGGING                                                                                         ##
-    ## To run this part remove the dot from the import lines at the beginning of this file as following: ##
-    ## from utils.numerical_transformer import NumericalTransformer                                      ##
-    ## from utils.categorical_transformer import CategoricalTransformer                                  ##
-    #######################################################################################################
-    import os
-    import pandas as pd
-    import numpy as np
-    import polars as pl
-
-    # Tabular data
-    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/SURE/main/examples/data/census_dataset"
-    # real_data = pl.read_csv(os.path.join(file_path,"census_dataset_training.csv"))
-
-    # Time series
-    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tutorials/time_series/data/daily_delhi_climate"
-    # path=os.path.join(file_path, "DailyDelhiClimateTrain.csv")
-    # real_data = pl.read_csv(path)
-
-    real_data= pd.read_csv('MEP/MEP_Pettinari_2024W37.csv')
-    # file_path = "https://raw.githubusercontent.com/Clearbox-AI/clearbox-synthetic-kit/main/tests/resources/uci_adult_dataset"
-    # real_data = pd.read_csv(os.path.join(file_path,"dataset.csv"))
-    # # real_data["income"]      = real_data["income"].map({"<=50K": 0, ">50K": 1})
-
-    preprocessor            = Preprocessor(real_data, num_fill_null="none", scaling='standardize')
-    real_data_preprocessed  = preprocessor.transform(real_data)
-    df_inverse              = preprocessor.inverse_transform(real_data_preprocessed)
-    pass
