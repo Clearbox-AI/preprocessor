@@ -11,11 +11,6 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-# from .utils.numerical_transformer import NumericalTransformer
-# from .utils.categorical_transformer import CategoricalTransformer
-# from .utils.datetime_transformer import DatetimeTransformer
-
-# UNCOMMENT FOR DEBUGGING
 from .utils.numerical_transformer import NumericalTransformer
 from .utils.categorical_transformer import CategoricalTransformer
 from .utils.datetime_transformer import DatetimeTransformer

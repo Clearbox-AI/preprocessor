@@ -70,11 +70,11 @@ class NumericalTransformer:
                         else:
                             # Default fallback if we don't have min values
                             col_min = -10
-                            data = data.with_columns(pl.col(col).fill_null(col_min).fill_nan(col_min))
+                            data = data.with_columns(pl.col(col).fill_null(col_min))
             else:
-                data = data.with_columns(col_num.fill_null(strategy=num_fill_null).fill_nan(num_fill_null))
+                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
         else:
-            data = data.with_columns(col_num.fill_null(num_fill_null).fill_nan(num_fill_null))
+            data = data.with_columns(col_num.fill_null(num_fill_null))
 
         return data
 
