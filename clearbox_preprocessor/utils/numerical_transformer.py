@@ -50,6 +50,8 @@ class NumericalTransformer:
         scaling = self.scaling
         col_num = pl.col(numerical_features)
 
+        schema = data.collect_schema()
+        
         if isinstance(num_fill_null, str):
             if num_fill_null == "interpolate":
                 data = data.with_columns(col_num).interpolate()
@@ -70,13 +72,14 @@ class NumericalTransformer:
                         else:
                             # Default fallback if we don't have min values
                             col_min = -10
-                            data = data.with_columns(pl.col(col).fill_null(col_min))
+                            data = data.with_columns(pl.col(col).fill_null(col_min).fill_nan(col_min))
             else:
                 data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
         else:
-            data = data.with_columns(col_num.fill_null(num_fill_null))
+            data = data.with_columns(col_num.fill_null(num_fill_null).fill_nan(num_fill_null))
 
-        return data
+        # Return the dataframe with the original schema (fill_nan() may change the dtype of some columns)
+        return data.cast(schema)
 
     def transform(self, data: pl.DataFrame):
         """
