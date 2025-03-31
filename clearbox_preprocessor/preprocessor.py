@@ -526,8 +526,14 @@ class Preprocessor:
                 col_max = self.target_col_encoder[1][self.target_column].item()
                 data = data.with_columns(pl.col(self.target_column) * (col_max - col_min) + col_min)
             
-        # Convert "None" labels to NaN
-        data = data.with_columns(pl.col(self.categorical_features).str.replace("None", np.nan))
+        # Convert "None" labels to None
+        for col in self.categorical_features:
+            data = data.with_columns(
+                pl.when(pl.col(col) == "None")
+                .then(None)
+                .otherwise(pl.col(col))
+                .alias(col)
+            )
 
         if self.data_was_pd:
             data = data.to_pandas()        
