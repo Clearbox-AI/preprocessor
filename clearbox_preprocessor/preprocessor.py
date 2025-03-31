@@ -325,7 +325,7 @@ class Preprocessor:
                 self.discarded_info.append(warning_message)
 
         if len(too_much_info)>0:
-            warnings.warn(f"Some rare labels have been aggregated into the 'other' category. You can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter, but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.")
+            warnings.warn(f"Some rare labels have been aggregated into the 'other' category.\nNote: you can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter, but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.\n")
 
         data = self._shrink_labels(data, too_much_info)
         self.discarded = (no_info, too_much_info)
@@ -527,7 +527,7 @@ class Preprocessor:
                 data = data.with_columns(pl.col(self.target_column) * (col_max - col_min) + col_min)
             
         # Convert "None" labels to NaN
-        data = data.with_columns(pl.col(self.categorical_features).str.replace("None", None))
+        data = data.with_columns(pl.col(self.categorical_features).str.replace("None", np.nan))
 
         if self.data_was_pd:
             data = data.to_pandas()        
