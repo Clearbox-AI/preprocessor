@@ -147,6 +147,7 @@ class Preprocessor:
         else:
             self.data_was_pd = False
 
+        self.schema                 = data.collect_schema()
         self.discarded_info         = []
         self.missing_threshold      = missing_values_threshold
         self.excluded_col           = excluded_col
@@ -200,7 +201,7 @@ class Preprocessor:
         Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, time or boolean. 
         """
         # Collect the schema to get column names and their data types
-        schema = data.collect_schema()
+        schema = self.schema
 
         # Store the names of boolean columns into 'boolean_features'
         boolean_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype == pl.Boolean]
@@ -534,6 +535,9 @@ class Preprocessor:
                 .otherwise(pl.col(col))
                 .alias(col)
             )
+
+        # Make sure the column data types match the one of the orignal dataframe (especially float and int)
+        data = data.cast(self.schema)
 
         if self.data_was_pd:
             data = data.to_pandas()        
