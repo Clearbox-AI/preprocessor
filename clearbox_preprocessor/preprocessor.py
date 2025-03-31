@@ -392,8 +392,7 @@ class Preprocessor:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
         
         # Replace empty strings ("") with None value
-        col_str = pl.col(self.categorical_features)
-        data = data.with_columns(col_str.replace({"":None, " ":None})) 
+        data = data.with_columns(pl.col(self.categorical_features).replace({"":None, " ":None})) 
 
         # Substitute rare lables with "other" in categorical features
         data = self._shrink_labels(data, self.discarded[1])
@@ -527,6 +526,9 @@ class Preprocessor:
                 col_max = self.target_col_encoder[1][self.target_column].item()
                 data = data.with_columns(pl.col(self.target_column) * (col_max - col_min) + col_min)
             
+        # Convert "None" labels to NaN
+        data = data.with_columns(pl.col(self.categorical_features).str.replace("None", None))
+
         if self.data_was_pd:
             data = data.to_pandas()        
         return data
