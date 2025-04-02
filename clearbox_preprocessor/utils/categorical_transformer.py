@@ -58,14 +58,17 @@ class CategoricalTransformer:
                     one_hot_encoded_discarded.append(f"{key}_{value}")
 
         original_encoded_columns = self.original_encoded_columns
+        flat_list_original_encoded_columns = [val for sublist in original_encoded_columns.values() for val in sublist]
+
         for original_col, col_list in original_encoded_columns.items():
             for col_name in col_list:
                 if col_name not in df.columns and col_name not in one_hot_encoded_discarded:
                     df = df.with_columns(pl.Series(col_name, [0] * df.height))
-                    if col_name not in encoded_columns[original_col]:
+                    if original_col in encoded_columns and col_name not in encoded_columns[original_col]:
                         encoded_columns[original_col].append(col_name)
         
-        return df, encoded_columns
+        num_cols = [i for i in df.columns if i not in flat_list_original_encoded_columns]
+        return df[num_cols+flat_list_original_encoded_columns], encoded_columns
 
     def inverse_transform(
         self, 
