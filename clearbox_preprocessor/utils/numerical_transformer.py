@@ -23,17 +23,17 @@ class NumericalTransformer:
             pass
         elif scaling == "normalize":
             # Normalization parameters initialization
-            self.numerical_parameters = [data.select(numerical_features).min().collect(), 
-                                         data.select(numerical_features).max().collect()]
+            self.numerical_parameters = [data.select(numerical_features).min(), 
+                                         data.select(numerical_features).max()]
         elif scaling == "standardize":
             # Standardization parameters initialization
-            self.numerical_parameters = [data.select(numerical_features).mean().collect(), 
-                                         data.select(numerical_features).std().collect()] 
+            self.numerical_parameters = [data.select(numerical_features).mean(), 
+                                         data.select(numerical_features).std()] 
         elif scaling == "quantile":     
-            self.numerical_parameters = [data.select(numerical_features).min().collect(), 
-                                         data.select(numerical_features).max().collect()]
+            self.numerical_parameters = [data.select(numerical_features).min(), 
+                                         data.select(numerical_features).max()]
             data = self.fill_null(data)
-            self.scaler = QuantileTransformer(output_distribution="normal", random_state=0).fit(data.select(numerical_features).collect())
+            self.scaler = QuantileTransformer(output_distribution="normal", random_state=0).fit(data.select(numerical_features))
         elif scaling == "kbins":
             # K-bins discretizer parameters initialization
             if n_bins==0:

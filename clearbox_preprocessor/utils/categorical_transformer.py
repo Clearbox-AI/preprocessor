@@ -12,7 +12,6 @@ class CategoricalTransformer:
         self.original_encoded_columns = {}
 
         # Store encoded columns
-        df = df.collect()
         for col in df.select(self.categorical_features).columns:
             if df[col].dtype == pl.String:
                 one_hot = df[col].to_dummies()
@@ -21,6 +20,7 @@ class CategoricalTransformer:
     def transform(
         self, 
         df: pl.DataFrame,
+        preprocessor,
     ) -> pl.DataFrame:
         """
         Perform one-hot encoding on categorical columns of the DataFrame.
@@ -39,6 +39,7 @@ class CategoricalTransformer:
         Dict
             A dictionary containing the encoded columns.
         """
+        # discarded = preprocessor.discarded
         categorical_features = self.categorical_features
         encoded_columns = {}
 
@@ -48,6 +49,22 @@ class CategoricalTransformer:
                 encoded_columns[col] = one_hot.columns
                 df = df.hstack(one_hot)
                 df = df.drop(col)
+
+        # Add zero-filled missing encoded columns (encoded columns that where present in the transformed dataset the preprocessor was initialized with and are missing in the transformed dataset here)
+        one_hot_encoded_discarded = preprocessor.discarded[0].copy()
+        for key, values in preprocessor.discarded[1].items():
+            for value in values:
+                if value is not None:
+                    one_hot_encoded_discarded.append(f"{key}_{value}")
+
+        original_encoded_columns = self.original_encoded_columns
+        for original_col, col_list in original_encoded_columns.items():
+            for col_name in col_list:
+                if col_name not in df.columns and col_name not in one_hot_encoded_discarded:
+                    df = df.with_columns(pl.Series(col_name, [0] * df.height))
+                    if col_name not in encoded_columns[original_col]:
+                        encoded_columns[original_col].append(col_name)
+        
         return df, encoded_columns
 
     def inverse_transform(

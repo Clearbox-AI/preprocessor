@@ -11,9 +11,9 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-from .utils.numerical_transformer import NumericalTransformer
+from .utils.numerical_transformer   import NumericalTransformer
 from .utils.categorical_transformer import CategoricalTransformer
-from .utils.datetime_transformer import DatetimeTransformer
+from .utils.datetime_transformer    import DatetimeTransformer
 
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
@@ -168,12 +168,12 @@ class Preprocessor:
         if target_column is not None:
             self.excluded_col.append(target_column)
 
-        self._infer_feature_types(data)
+        self._infer_feature_types()
         self.datetime_transformer   = DatetimeTransformer(self)
         data                        = self.datetime_transformer.fit(data.collect()) # Return data with time columns transformed into timestamp integer
-        self.datetime_features          = self.datetime_transformer.datetime_features
+        self.datetime_features      = self.datetime_transformer.datetime_features
         self.categorical_features   = tuple(set(self.categorical_features) - set(self.datetime_features))
-        self._feature_selection(data)
+        data = self._feature_selection(data)
 
         # Initialization of NumericalTransformer and CategoricalTransformer
         if len(self.numerical_features) > 0:
@@ -195,7 +195,6 @@ class Preprocessor:
             
     def _infer_feature_types(
             self, 
-            data: pl.LazyFrame
         ) -> None:
         """
         Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, time or boolean. 
@@ -241,10 +240,13 @@ class Preprocessor:
 
         """
         expressions = []
-        schema = instance.collect_schema()
+        # schema = instance.collect_schema()
 
         for column_name, values_to_shrink in too_much_info.items():
-            if schema[column_name] == pl.String:
+            if self.schema[column_name] == pl.String:
+                # Replace empty strings ("") with None value
+                instance = instance.with_columns(pl.col(column_name).replace({"":None, " ":None})) 
+
                 # Convert null values in string "None" and substyitute rare categorical labels with "other"
                 expr = (pl.col(column_name).
                         fill_null("None").
@@ -285,9 +287,6 @@ class Preprocessor:
         - Categorical columns with rare labels are modified by aggregating them into ``"other"``.
         """
         self.discarded_features = []
-
-        col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
-        data = data.with_columns(col_cat.replace({"":None, " ":None})) 
         data = data.collect()
 
         cat_features_stats = [
@@ -336,6 +335,8 @@ class Preprocessor:
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
         self.datetime_features    = tuple(set(self.datetime_features)    - set(self.discarded_features))
+        
+        return data
     
     def transform(
             self, 
@@ -391,9 +392,6 @@ class Preprocessor:
             pass
         else:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
-        
-        # Replace empty strings ("") with None value
-        data = data.with_columns(pl.col(self.categorical_features).replace({"":None, " ":None})) 
 
         # Substitute rare lables with "other" in categorical features
         data = self._shrink_labels(data, self.discarded[1])
@@ -421,7 +419,7 @@ class Preprocessor:
         if hasattr(self, "categorical_transformer"):
             if isinstance(data, pl.LazyFrame):
                 data = data.collect()
-            data, new_encoded_columns = self.categorical_transformer.transform(data)
+            data, new_encoded_columns = self.categorical_transformer.transform(data, self)
 
             self.categorical_features_sizes = []
             for values in new_encoded_columns.values():
@@ -449,7 +447,7 @@ class Preprocessor:
                 pass
             else:
                 raise ValueError(f"Unsupported ml_task: {self.ml_task}")
-            
+        
         if self.data_was_pd:
             data = data.to_pandas()   
             
