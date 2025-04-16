@@ -303,7 +303,7 @@ class Preprocessor:
         too_much_info = {}
         # Categorical features
         for column_stats in cat_features_stats:
-            if (column_stats[1].shape[0] == 1) or (column_stats[1].shape[0] >= (data.shape[0] * 0.98)):
+            if (column_stats[1].shape[0] == 1) or (column_stats[1]["count"].max() >= (data.shape[0] * 0.98)):
                 no_info.append(column_stats[0])
                 warning_message = f"\n{column_stats[0]} contains a single value"
                 warnings.warn(warning_message+' and was discarded')
@@ -413,6 +413,13 @@ class Preprocessor:
         if hasattr(self, "numerical_transformer"):
             data = self.numerical_transformer.transform(data)
 
+        # Boolean features processing
+        # Convert boolean columns to integer
+        data = data.with_columns([
+            pl.col(col).cast(pl.UInt8)
+            for col in self.boolean_features
+        ])
+
         # Categorical features processing
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
@@ -509,9 +516,14 @@ class Preprocessor:
         else:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
 
-        # Inverse transofmration of numerical and categorical features
+        # Inverse transofmration of datetime, boolean, numerical and categorical features
         if len(self.datetime_features)>0:
             data = self.datetime_transformer.inverse_transform(data)
+        if len(self.boolean_features)>0:
+            data = data.with_columns([
+                pl.col(col).cast(pl.Boolean)
+                for col in self.boolean_features
+            ])
         if len(self.numerical_features)>0:
             data = self.numerical_transformer.inverse_transform(data)
         if len(self.categorical_features)>0:
@@ -535,7 +547,9 @@ class Preprocessor:
             )
 
         # Make sure the column data types match the one of the orignal dataframe (especially float and int)
-        data = data.cast(self.schema)
+        data = data.with_columns([
+            pl.col(col).cast(self.schema[col]) for col in data.columns
+        ])
 
         if self.data_was_pd:
             data = data.to_pandas()        
