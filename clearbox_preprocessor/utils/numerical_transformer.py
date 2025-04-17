@@ -19,6 +19,9 @@ class NumericalTransformer:
         num_fill_null           = preprocessor.num_fill_null
         self.num_fill_null      = num_fill_null
 
+        # Replace infinite values in the data
+        data = self.replace_inf(data, numerical_features)
+
         if scaling == "none":
             pass
         elif scaling == "normalize":
@@ -43,6 +46,24 @@ class NumericalTransformer:
         else:
             raise ValueError(f"Unknown scaling method: {scaling}.")
 
+    def replace_inf(self, data, columns):
+        THRESHOLD = 1e308  # anything bigger is suspicious
+
+        # Replace values greater than THRESHOLD with None
+        data = data.with_columns([
+            pl.when(
+                (pl.col(col).is_infinite()) |
+                (pl.col(col) > THRESHOLD) |
+                (pl.col(col) < -THRESHOLD)
+            ).then(
+                None
+            ).otherwise(
+                pl.col(col)
+            ).alias(col)
+            for col in columns
+        ])
+        return data
+    
     def fill_null(self, data: pl.DataFrame): 
               
         num_fill_null = self.num_fill_null
@@ -107,6 +128,9 @@ class NumericalTransformer:
         scaling = self.scaling
         numerical_features = self.numerical_features
         
+        # Replace infinite values in the data
+        data = self.replace_inf(data, numerical_features)
+
         # Fill null values with the specified strategy
         data = self.fill_null(data)
             
