@@ -19,20 +19,24 @@ class NumericalTransformer:
         num_fill_null           = preprocessor.num_fill_null
         self.num_fill_null      = num_fill_null
 
+        # Replace infinite values in the data
+        data = self.replace_inf(data, numerical_features)
+
         if scaling == "none":
             pass
         elif scaling == "normalize":
             # Normalization parameters initialization
-            self.numerical_parameters = [data.select(numerical_features).min().collect(), 
-                                         data.select(numerical_features).max().collect()]
+            self.numerical_parameters = [data.select(numerical_features).min(), 
+                                         data.select(numerical_features).max()]
         elif scaling == "standardize":
             # Standardization parameters initialization
-            self.numerical_parameters = [data.select(numerical_features).mean().collect(), 
-                                         data.select(numerical_features).std().collect()] 
+            self.numerical_parameters = [data.select(numerical_features).mean(), 
+                                         data.select(numerical_features).std()] 
         elif scaling == "quantile":     
-            self.numerical_parameters = [data.select(numerical_features).min().collect(), 
-                                         data.select(numerical_features).max().collect()]
-            self.scaler = QuantileTransformer(output_distribution="normal", random_state=0).fit(data.select(numerical_features).collect())
+            self.numerical_parameters = [data.select(numerical_features).min(), 
+                                         data.select(numerical_features).max()]
+            data = self.fill_null(data)
+            self.scaler = QuantileTransformer(output_distribution="normal", random_state=0).fit(data.select(numerical_features))
         elif scaling == "kbins":
             # K-bins discretizer parameters initialization
             if n_bins==0:
@@ -41,6 +45,62 @@ class NumericalTransformer:
                 self.n_bins_labels=list(map(str, list(range(0, n_bins)))) 
         else:
             raise ValueError(f"Unknown scaling method: {scaling}.")
+
+    def replace_inf(self, data, columns):
+        THRESHOLD = 1e308  # anything bigger is suspicious
+
+        # Replace values greater than THRESHOLD with None
+        data = data.with_columns([
+            pl.when(
+                (pl.col(col).is_infinite()) |
+                (pl.col(col) > THRESHOLD) |
+                (pl.col(col) < -THRESHOLD)
+            ).then(
+                None
+            ).otherwise(
+                pl.col(col)
+            ).alias(col)
+            for col in columns
+        ])
+        return data
+    
+    def fill_null(self, data: pl.DataFrame): 
+              
+        num_fill_null = self.num_fill_null
+        numerical_features = self.numerical_features
+        scaling = self.scaling
+        col_num = pl.col(numerical_features)
+
+        schema = data.collect_schema()
+        
+        if isinstance(num_fill_null, str):
+            if num_fill_null == "interpolate":
+                data = data.with_columns(col_num).interpolate()
+            elif num_fill_null == "none":
+                if scaling in ["quantile", "normalize"]:
+                    # Use min value for each column from numerical_parameters
+                    for col in numerical_features:
+                        col_min = self.numerical_parameters[0][col].item()
+                        data = data.with_columns(pl.col(col).fill_null(col_min-0.01).fill_nan(col_min-0.01))
+                else:
+                    # For standardization or other methods
+                    for col in numerical_features:
+                        if scaling == "standardize":
+                            # For standardization, we could use mean - 3*std as an approximation of min
+                            col_mean = self.numerical_parameters[0][col].item()
+                            col_std = self.numerical_parameters[1][col].item()
+                            col_min = col_mean - 3 * col_std - 0.01
+                        else:
+                            # Default fallback if we don't have min values
+                            col_min = -10
+                            data = data.with_columns(pl.col(col).fill_null(col_min).fill_nan(col_min))
+            else:
+                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
+        else:
+            data = data.with_columns(col_num.fill_null(num_fill_null).fill_nan(num_fill_null))
+
+        # Return the dataframe with the original schema (fill_nan() may change the dtype of some columns)
+        return data.cast(schema)
 
     def transform(self, data: pl.DataFrame):
         """
@@ -67,34 +127,12 @@ class NumericalTransformer:
         """
         scaling = self.scaling
         numerical_features = self.numerical_features
-        num_fill_null = self.num_fill_null
+        
+        # Replace infinite values in the data
+        data = self.replace_inf(data, numerical_features)
+
         # Fill null values with the specified strategy
-        col_num = pl.col(numerical_features)
-        if isinstance(num_fill_null, str):
-            if num_fill_null == "interpolate":
-                data = data.with_columns(col_num).interpolate()
-            elif num_fill_null == "none":
-                if scaling in ["quantile", "normalize"]:
-                    # Use min value for each column from numerical_parameters
-                    for col in numerical_features:
-                        col_min = self.numerical_parameters[0][col].item()
-                        data = data.with_columns(pl.col(col).fill_null(col_min-0.01).fill_nan(col_min-0.01))
-                else:
-                    # For standardization or other methods
-                    for col in numerical_features:
-                        if scaling == "standardize":
-                            # For standardization, we could use mean - 3*std as an approximation of min
-                            col_mean = self.numerical_parameters[0][col].item()
-                            col_std = self.numerical_parameters[1][col].item()
-                            col_min = col_mean - 3 * col_std - 0.01
-                        else:
-                            # Default fallback if we don't have min values
-                            col_min = -10
-                        data = data.with_columns(pl.col(col).fill_null(col_min).fill_nan(col_min))
-            else:
-                data = data.with_columns(col_num.fill_null(strategy=num_fill_null).fill_nan(num_fill_null))
-        else:
-            data = data.with_columns(col_num.fill_null(num_fill_null).fill_nan(num_fill_null))
+        data = self.fill_null(data)
             
         # Scale numerical features with the specified method
         if scaling == "none":

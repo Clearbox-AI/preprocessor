@@ -62,8 +62,10 @@ class DatetimeTransformer():
                 self.datetime_features = self.datetime_features + tuple([col]) if col not in self.datetime_features else self.datetime_features
             elif col_dtype == pl.Utf8:
                 # Check if the column contains date strings
-                sample_values = df[col].head(10).to_list()  # Sample a few values for inference
-                if all(self._is_date_string(value) for value in sample_values if value is not None):
+                sample_values = df[col].head(100).to_list()  # Sample a few values for inference
+                if all(x is None for x in sample_values):
+                    continue
+                elif all(self._is_date_string(value) for value in sample_values if value is not None):
                     self.datetime_features = self.datetime_features + tuple([col]) if col not in self.datetime_features else self.datetime_features
 
         # Convert inferred time columns to their respective time data types

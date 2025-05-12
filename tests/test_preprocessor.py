@@ -152,3 +152,42 @@ def test_extract_ts_features(sample_pandas_df):
         # Allow some floating-point precision issues
         assert abs(features.loc[1, 'value1__mean'] - 2.0) < 1e-5
         assert abs(features.loc[2, 'value1__mean'] - 7.0) < 1e-5
+
+
+def test_categorical_transformer(sample_pandas_df):
+    # Test categorical feature transformation
+    preprocessor = Preprocessor(sample_pandas_df, cat_labels_threshold=0.2, time_id="time")
+    
+    # First check that categorical features are recognized correctly
+    assert "categorical_feature" in preprocessor.get_categorical_features()
+    
+    # Check that the categorical transformer was initialized
+    assert hasattr(preprocessor, "categorical_transformer")
+    
+    # Check categorical original_encoded_columns
+    assert "categorical_feature" in preprocessor.categorical_transformer.original_encoded_columns
+    
+    # Transform the data
+    transformed = preprocessor.transform(sample_pandas_df)
+    
+    # Verify transformed data is not empty
+    assert len(transformed) > 0
+    assert transformed.shape[0] == sample_pandas_df.shape[0]
+    
+    # Get one-hot encoded columns
+    categorical_columns = [col for col in transformed.columns if col.startswith("categorical_feature_")]
+    
+    # Make sure we have one-hot encoded columns
+    assert len(categorical_columns) > 0
+    
+    # Check that "C" (most frequent category) is preserved
+    assert "categorical_feature_C" in categorical_columns
+    
+    # Check that rare categories are grouped to "other"
+    # D is rare with only 1 occurrence out of 10 (10%) which is below the 20% threshold
+    assert "categorical_feature_other" in categorical_columns
+    
+    # Check the sum of one-hot encoded columns
+    one_hot_sum = transformed[categorical_columns].sum(axis=1)
+    assert one_hot_sum.sum() > 0  # Make sure there's at least some one-hot encoding
+    assert len(one_hot_sum) == len(sample_pandas_df)  # Check that row count matches

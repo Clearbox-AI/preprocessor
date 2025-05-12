@@ -11,14 +11,9 @@ from typing import List, Tuple, Literal, Dict
 import warnings
 import numpy as np
 
-# from .utils.numerical_transformer import NumericalTransformer
-# from .utils.categorical_transformer import CategoricalTransformer
-# from .utils.datetime_transformer import DatetimeTransformer
-
-# UNCOMMENT FOR DEBUGGING
-from .utils.numerical_transformer import NumericalTransformer
+from .utils.numerical_transformer   import NumericalTransformer
 from .utils.categorical_transformer import CategoricalTransformer
-from .utils.datetime_transformer import DatetimeTransformer
+from .utils.datetime_transformer    import DatetimeTransformer
 
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
@@ -152,6 +147,7 @@ class Preprocessor:
         else:
             self.data_was_pd = False
 
+        self.schema                 = data.collect_schema()
         self.discarded_info         = []
         self.missing_threshold      = missing_values_threshold
         self.excluded_col           = excluded_col
@@ -172,12 +168,12 @@ class Preprocessor:
         if target_column is not None:
             self.excluded_col.append(target_column)
 
-        self._infer_feature_types(data)
+        self._infer_feature_types()
         self.datetime_transformer   = DatetimeTransformer(self)
         data                        = self.datetime_transformer.fit(data.collect()) # Return data with time columns transformed into timestamp integer
-        self.datetime_features          = self.datetime_transformer.datetime_features
+        self.datetime_features      = self.datetime_transformer.datetime_features
         self.categorical_features   = tuple(set(self.categorical_features) - set(self.datetime_features))
-        self._feature_selection(data)
+        data = self._feature_selection(data)
 
         # Initialization of NumericalTransformer and CategoricalTransformer
         if len(self.numerical_features) > 0:
@@ -199,13 +195,12 @@ class Preprocessor:
             
     def _infer_feature_types(
             self, 
-            data: pl.LazyFrame
         ) -> None:
         """
         Infer the type of each feature in the LazyFrame. The type is either numerical, categorical, time or boolean. 
         """
         # Collect the schema to get column names and their data types
-        schema = data.collect_schema()
+        schema = self.schema
 
         # Store the names of boolean columns into 'boolean_features'
         boolean_columns = [name for name, dtype in zip(schema.names(), schema.dtypes()) if dtype == pl.Boolean]
@@ -245,10 +240,13 @@ class Preprocessor:
 
         """
         expressions = []
-        schema = instance.collect_schema()
+        # schema = instance.collect_schema()
 
         for column_name, values_to_shrink in too_much_info.items():
-            if schema[column_name] == pl.String:
+            if self.schema[column_name] == pl.String:
+                # Replace empty strings ("") with None value
+                instance = instance.with_columns(pl.col(column_name).replace({"":None, " ":None})) 
+
                 # Convert null values in string "None" and substyitute rare categorical labels with "other"
                 expr = (pl.col(column_name).
                         fill_null("None").
@@ -289,9 +287,6 @@ class Preprocessor:
         - Categorical columns with rare labels are modified by aggregating them into ``"other"``.
         """
         self.discarded_features = []
-
-        col_cat = cs.by_name(self.categorical_features)-cs.by_name(self.excluded_col)
-        data = data.with_columns(col_cat.replace({"":None, " ":None})) 
         data = data.collect()
 
         cat_features_stats = [
@@ -308,7 +303,7 @@ class Preprocessor:
         too_much_info = {}
         # Categorical features
         for column_stats in cat_features_stats:
-            if (column_stats[1].shape[0] == 1) or (column_stats[1].shape[0] >= (data.shape[0] * 0.98)):
+            if (column_stats[1].shape[0] == 1) or (column_stats[1]["count"].max() >= (data.shape[0] * 0.98)):
                 no_info.append(column_stats[0])
                 warning_message = f"\n{column_stats[0]} contains a single value"
                 warnings.warn(warning_message+' and was discarded')
@@ -330,7 +325,7 @@ class Preprocessor:
                 self.discarded_info.append(warning_message)
 
         if len(too_much_info)>0:
-            warnings.warn(f"Some rare labels have been aggregated into the 'other' category. You can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter, but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.")
+            warnings.warn(f"Some rare labels have been aggregated into the 'other' category.\nNote: you can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter, but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.\n")
 
         data = self._shrink_labels(data, too_much_info)
         self.discarded = (no_info, too_much_info)
@@ -340,6 +335,8 @@ class Preprocessor:
         self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
         self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
         self.datetime_features    = tuple(set(self.datetime_features)    - set(self.discarded_features))
+        
+        return data
     
     def transform(
             self, 
@@ -395,10 +392,6 @@ class Preprocessor:
             pass
         else:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
-        
-        # Replace empty strings ("") with None value
-        col_str = pl.col(self.categorical_features)
-        data = data.with_columns(col_str.replace({"":None, " ":None})) 
 
         # Substitute rare lables with "other" in categorical features
         data = self._shrink_labels(data, self.discarded[1])
@@ -420,13 +413,20 @@ class Preprocessor:
         if hasattr(self, "numerical_transformer"):
             data = self.numerical_transformer.transform(data)
 
+        # Boolean features processing
+        # Convert boolean columns to integer
+        data = data.with_columns([
+            pl.col(col).cast(pl.UInt8)
+            for col in self.boolean_features
+        ])
+
         # Categorical features processing
         # OneHotEncoding and collect the pl.LazyFrame into a pl.Dataframe
         # The Dataframe is sorted according to "time" column if present
         if hasattr(self, "categorical_transformer"):
             if isinstance(data, pl.LazyFrame):
                 data = data.collect()
-            data, new_encoded_columns = self.categorical_transformer.transform(data)
+            data, new_encoded_columns = self.categorical_transformer.transform(data, self)
 
             self.categorical_features_sizes = []
             for values in new_encoded_columns.values():
@@ -454,7 +454,7 @@ class Preprocessor:
                 pass
             else:
                 raise ValueError(f"Unsupported ml_task: {self.ml_task}")
-            
+        
         if self.data_was_pd:
             data = data.to_pandas()   
             
@@ -516,9 +516,14 @@ class Preprocessor:
         else:
             sys.exit(f'ErrorType\nThe datatype provided ({type(data)}) is not supported by the Preprocessor.')
 
-        # Inverse transofmration of numerical and categorical features
+        # Inverse transofmration of datetime, boolean, numerical and categorical features
         if len(self.datetime_features)>0:
             data = self.datetime_transformer.inverse_transform(data)
+        if len(self.boolean_features)>0:
+            data = data.with_columns([
+                pl.col(col).cast(pl.Boolean)
+                for col in self.boolean_features
+            ])
         if len(self.numerical_features)>0:
             data = self.numerical_transformer.inverse_transform(data)
         if len(self.categorical_features)>0:
@@ -532,6 +537,20 @@ class Preprocessor:
                 col_max = self.target_col_encoder[1][self.target_column].item()
                 data = data.with_columns(pl.col(self.target_column) * (col_max - col_min) + col_min)
             
+        # Convert "None" labels to None
+        for col in self.categorical_features:
+            data = data.with_columns(
+                pl.when(pl.col(col) == "None")
+                .then(None)
+                .otherwise(pl.col(col))
+                .alias(col)
+            )
+
+        # Make sure the column data types match the one of the orignal dataframe (especially float and int)
+        data = data.with_columns([
+            pl.col(col).cast(self.schema[col]) for col in data.columns
+        ])
+
         if self.data_was_pd:
             data = data.to_pandas()        
         return data
