@@ -380,8 +380,8 @@ class Preprocessor:
         """
         # Check data type compatibility
         data_is_pd = isinstance(data, pd.DataFrame)
-        if data_is_pd != self.data_was_pd:
-            sys.exit(f'Type mismatch: Preprocessor was initialized with {"pandas" if self.data_was_pd else "polars"} DataFrame but transform was called with {"pandas" if data_is_pd else "polars"} DataFrame')
+        # if data_is_pd != self.data_was_pd:
+        #     sys.exit(f'Type mismatch: Preprocessor was initialized with {"pandas" if self.data_was_pd else "polars"} DataFrame but transform was called with {"pandas" if data_is_pd else "polars"} DataFrame')
 
         # Transform data from Pandas.DataFrame or Polars.DataFrame to Polars.LazyFrame
         if isinstance(data, pd.DataFrame):
