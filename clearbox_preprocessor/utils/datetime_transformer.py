@@ -96,11 +96,8 @@ class DatetimeTransformer():
             data = data.collect()
         
         data = data.sort(self.datetime_features[0])
-        import pdb; pdb.set_trace() 
         data = self._infer_and_convert_time_columns(data) # Returns data with time columns converted to integers
-        import pdb; pdb.set_trace() 
         data = data.with_columns(pl.col(self.datetime_features).interpolate()) # Linear interpolation
-        import pdb; pdb.set_trace()
         if self.scaling in ["normalize", "quantile", "kbins"]:
             for col in self.datetime_features:
                 col_min = self.time_parameters[0][col].item()
@@ -111,7 +108,6 @@ class DatetimeTransformer():
                 col_mean = self.time_parameters[0][col].item()
                 col_std  = self.time_parameters[1][col].item()
                 data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
-        import pdb; pdb.set_trace() 
         return data
 
     def inverse_transform(self, data):
