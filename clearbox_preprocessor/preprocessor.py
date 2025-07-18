@@ -8,12 +8,62 @@ from sklearn.preprocessing import LabelEncoder
 from tsfresh import extract_relevant_features, extract_features
 
 from typing import List, Tuple, Literal, Dict
+from collections.abc import Sequence
 import warnings
 import numpy as np
 
 from .utils.numerical_transformer   import NumericalTransformer
 from .utils.categorical_transformer import CategoricalTransformer
 from .utils.datetime_transformer    import DatetimeTransformer
+
+def _analyse_categoricals_lazy(
+    lf: pl.LazyFrame | pl.DataFrame,
+    cat_cols: Sequence[str],
+    total_rows: int,
+    rare_thr: float,
+    dominant_thr: float = 0.98,
+) -> tuple[list[str], dict[str, list]]:
+    """
+    Return (cols_to_drop, {col: [rare labels]}).
+
+    - Drop a categorical col if it has 1 label **or**
+      a single label covers ≥ dominant_thr of rows.
+    - A label is 'rare' if freq < rare_thr × total_rows.
+    """
+    if not cat_cols:
+        return [], {}
+
+    # Ensure we work on a LazyFrame for one-pass scanning
+    lf = lf.lazy() if isinstance(lf, pl.DataFrame) else lf
+
+    cols_to_drop: list[str] = []
+    rare_map: dict[str, list] = {}
+
+    for col in cat_cols:
+        g = lf.group_by(col).agg(pl.count().alias("cnt"))
+
+        # one-row table: (max count, n_unique)
+        max_cnt, n_unique = (
+            g.select(pl.max("cnt"), pl.count()).collect().row(0)
+        )
+
+        if n_unique == 1 or max_cnt >= dominant_thr * total_rows:
+            cols_to_drop.append(col)
+            continue
+        if n_unique <= 2:
+            continue
+
+        rare_labels = (
+            g.filter(pl.col("cnt") < rare_thr * total_rows)
+              .select(col)
+              .collect()
+              .get_column(col)
+              .to_list()
+        )
+        if rare_labels:
+            rare_map[col] = rare_labels
+
+    return cols_to_drop, rare_map
 
 class Preprocessor:
     ML_TASKS = {"classification", "regression", None}
@@ -260,7 +310,7 @@ class Preprocessor:
     def _feature_selection(
             self,
             data: pl.LazyFrame,
-        ) -> None:
+        ) -> pl.DataFrame:
         """
         Perform feature selection to retain the most informative columns in a DataFrame while discarding redundant features.
 
@@ -286,57 +336,42 @@ class Preprocessor:
         - Categorical columns in which a single unique value appears in more than 98% of the records are discarded.
         - Categorical columns with rare labels are modified by aggregating them into ``"other"``.
         """
-        self.discarded_features = []
-        data = data.collect()
+        lf = data if isinstance(data, pl.LazyFrame) else data.lazy()
+        n_rows: int = lf.select(pl.len()).collect().item()
 
-        cat_features_stats = [
-            (i, data[i].value_counts(), data[i].n_unique(), data.columns.index(i))
-            for i in self.categorical_features
-        ]
+        drop_cols, rare_map = _analyse_categoricals_lazy(
+            lf, list(self.categorical_features), n_rows, self.cat_labels_threshold,
+        )
 
-        ord_features_stats = [
-            (i, data[i].value_counts(), data[i].unique(), data.columns.index(i))
-            for i in self.numerical_features
-        ]
+        if self.numerical_features:
+            nunique_df = lf.select(
+                [pl.col(c).n_unique().alias(c) for c in self.numerical_features]
+            ).collect()
+            for c in self.numerical_features:
+                if nunique_df[c][0] <= 1:
+                    drop_cols.append(c)
+                    self.discarded_info.append(f"\n{c} contains a single value")
 
-        no_info = []
-        too_much_info = {}
-        # Categorical features
-        for column_stats in cat_features_stats:
-            if (column_stats[1].shape[0] == 1) or (column_stats[1]["count"].max() >= (data.shape[0] * 0.98)):
-                no_info.append(column_stats[0])
-                warning_message = f"\n{column_stats[0]} contains a single value"
-                warnings.warn(warning_message+' and was discarded')
-                self.discarded_features.append(column_stats[0])
-                self.discarded_info.append(warning_message)
-            else:
-                counts = column_stats[1].select("count").to_numpy() / column_stats[1].select("count").sum()
-                values_to_shrink_indices = np.where(counts < self.cat_labels_threshold)[0]
-                if values_to_shrink_indices.shape[0] > 0 and column_stats[1].shape[0] > 2:
-                    too_much_info[column_stats[0]] = [column_stats[1][column_stats[0]].to_list()[i] for i in values_to_shrink_indices]
+        # bookkeeping
+        drop_cols = list(dict.fromkeys(drop_cols))  # de-dup
+        self.discarded_features = drop_cols
+        self.discarded = (drop_cols, rare_map)
 
-        # Numerical features
-        for column_stats in ord_features_stats:
-            if column_stats[1].shape[0] <= 1:
-                no_info.append(column_stats[0])
-                warning_message = f"\n{column_stats[0]} contains a single value"  
-                warnings.warn(warning_message+' and was discarded')
-                self.discarded_features.append(column_stats[0])
-                self.discarded_info.append(warning_message)
+        df = lf.collect()
+        df = self._shrink_labels(df, rare_map)
 
-        if len(too_much_info)>0:
-            warnings.warn(f"Some rare labels have been aggregated into the 'other' category.\nNote: you can view the discarded labels using the 'discarded' attribute of your Preprocessor class.\nIf certain labels were unintentionally discarded, try adjusting the 'cat_labels_threshold' parameter, but keep in mind that rare labels are at risk of being re-identified in case of privacy attack.\n")
+        # refresh feature caches
+        self.boolean_features = tuple(set(self.boolean_features) - set(drop_cols))
+        self.numerical_features = tuple(set(self.numerical_features) - set(drop_cols))
+        self.categorical_features = tuple(set(self.categorical_features) - set(drop_cols))
+        self.datetime_features = tuple(set(self.datetime_features) - set(drop_cols))
 
-        data = self._shrink_labels(data, too_much_info)
-        self.discarded = (no_info, too_much_info)
-
-        # Update the numerical_features, categorical_features and datetime_features lists removing the discarded columns
-        self.boolean_features     = tuple(set(self.boolean_features)     - set(self.discarded_features))
-        self.numerical_features   = tuple(set(self.numerical_features)   - set(self.discarded_features))
-        self.categorical_features = tuple(set(self.categorical_features) - set(self.discarded_features))
-        self.datetime_features    = tuple(set(self.datetime_features)    - set(self.discarded_features))
-        
-        return data
+        if rare_map:
+            warnings.warn(
+                "Some rare labels were merged into the 'other' category "
+                f"(threshold = {self.cat_labels_threshold:g})."
+            )
+        return df
     
     def transform(
             self, 
