@@ -376,7 +376,10 @@ class Preprocessor:
     def transform(
             self, 
             data: pl.LazyFrame | pl.DataFrame | pd.DataFrame, 
-        ) -> pl.DataFrame | pd.DataFrame:
+            *,
+            as_batches: bool = False,
+            batch_size: int = 2_000,
+        ) -> (Iterable[np.ndarray] | pl.DataFrame | pd.DataFrame):
         """
         Transform the input dataset by processing numerical, time, and categorical columns.
         This includes filling null values, scaling or discretizing numerical features, and encoding
@@ -413,6 +416,34 @@ class Preprocessor:
             preprocessor = Preprocessor(real_data, scaling="standardize")
             transformed_data = preprocessor.transform(real_data)
         """
+
+        # ------------------------------------------------------------------
+        # 1️⃣  Streaming mode: yield `np.ndarray`/CSR chunks and exit early
+        # ------------------------------------------------------------------
+        if as_batches:
+            # In streaming we only need the *numerical* branch; categorical
+            # one-hotting must have been done upstream.
+
+            # Convert to Polars LazyFrame to get cheap slicing
+            if isinstance(data, pd.DataFrame):
+                lf = pl.from_pandas(data).lazy()
+            elif isinstance(data, pl.DataFrame):
+                lf = data.lazy()
+            elif isinstance(data, pl.LazyFrame):
+                lf = data
+            else:
+                sys.exit(f'Unsupported datatype {type(data)}')
+
+            n_rows = lf.select(pl.len()).collect().item()
+
+            for offset in range(0, n_rows, batch_size):
+                batch_df = lf.slice(offset, batch_size).collect()
+                # Convert to NumPy; Polars keeps a view when possible
+                # so this copies only if necessary ﻿
+                yield batch_df.to_numpy(dtype=np.float32, copy=False)
+            return  # prevents the rest of the function from running
+    
+        
         # Check data type compatibility
         data_is_pd = isinstance(data, pd.DataFrame)
         # if data_is_pd != self.data_was_pd:
