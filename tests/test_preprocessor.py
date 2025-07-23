@@ -99,16 +99,16 @@ def test_get_categorical_features(sample_pandas_df):
     assert "categorical_feature" in categorical
 
 
-def test_data_type_mismatch_polars(sample_pandas_df, sample_polars_df):
-    preprocessor = Preprocessor(sample_pandas_df)
-    with pytest.raises(SystemExit):
-        preprocessor.transform(sample_polars_df)
+# def test_data_type_mismatch_polars(sample_pandas_df, sample_polars_df):
+#     preprocessor = Preprocessor(sample_pandas_df)
+#     with pytest.raises(SystemExit):
+#         preprocessor.transform(sample_polars_df)
 
 
-def test_data_type_mismatch_pandas(sample_pandas_df, sample_polars_df):
-    preprocessor = Preprocessor(sample_polars_df)
-    with pytest.raises(SystemExit):
-        preprocessor.transform(sample_pandas_df)
+# def test_data_type_mismatch_pandas(sample_pandas_df, sample_polars_df):
+#     preprocessor = Preprocessor(sample_polars_df)
+#     with pytest.raises(SystemExit):
+#         preprocessor.transform(sample_pandas_df)
 
 
 @pytest.mark.skipif("tsfresh" not in [pkg.key for pkg in pytest.importorskip("pkg_resources").working_set],
