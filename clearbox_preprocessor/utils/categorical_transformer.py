@@ -42,7 +42,7 @@ class CategoricalTransformer:
         # discarded = preprocessor.discarded
         categorical_features = self.categorical_features
         encoded_columns = {}
-
+        num_cols = [i for i in df.columns if i not in categorical_features]
         for col in df.select(categorical_features).columns:
             if df[col].dtype == pl.String:
                 one_hot = df[col].to_dummies()
@@ -67,7 +67,6 @@ class CategoricalTransformer:
                     if original_col in encoded_columns and col_name not in encoded_columns[original_col]:
                         encoded_columns[original_col].append(col_name)
         
-        num_cols = [i for i in df.columns if i not in flat_list_original_encoded_columns]
         return df[num_cols+flat_list_original_encoded_columns], encoded_columns
 
     def inverse_transform(
