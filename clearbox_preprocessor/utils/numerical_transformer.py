@@ -1,274 +1,257 @@
-import polars as pl
+from __future__ import annotations
+
+import os
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable, Dict, List, Sequence
+
 import numpy as np
-from scipy.stats import norm
+import polars as pl
+from scipy.special import ndtr, ndtri
 from sklearn.preprocessing import QuantileTransformer
 
+# Offset, as a fraction of the column range, of the value used to encode nulls when
+# ``num_fill_null="none"``. Nulls are encoded slightly below the column minimum and every
+# value below half that offset is decoded back to null.
+NULL_SENTINEL_OFFSET = 0.01
+
+
+# Same bounds as sklearn's QuantileTransformer, so that the mapping below matches it exactly
+_BOUNDS_THRESHOLD = 1e-7
+_QUANTILE_CLIP_MIN = ndtri(_BOUNDS_THRESHOLD - np.spacing(1))
+_QUANTILE_CLIP_MAX = ndtri(1 - (_BOUNDS_THRESHOLD - np.spacing(1)))
+
+
+def _quantile_to_normal(x: np.ndarray, quantiles: np.ndarray, references: np.ndarray) -> np.ndarray:
+    """
+    Map one column (without NaN) to a standard normal distribution, as
+    ``QuantileTransformer(output_distribution="normal").transform`` does.
+    """
+    lower = x - _BOUNDS_THRESHOLD < quantiles[0]
+    upper = x + _BOUNDS_THRESHOLD > quantiles[-1]
+    # Interpolating in both directions and averaging handles repeated quantiles
+    y = 0.5 * (np.interp(x, quantiles, references) - np.interp(-x, -quantiles[::-1], -references[::-1]))
+    y[upper] = 1
+    y[lower] = 0
+    return np.clip(ndtri(y), _QUANTILE_CLIP_MIN, _QUANTILE_CLIP_MAX)
+
+
+def _normal_to_quantile(z: np.ndarray, quantiles: np.ndarray, references: np.ndarray) -> np.ndarray:
+    """Inverse of ``_quantile_to_normal``, as ``QuantileTransformer.inverse_transform`` does."""
+    u = ndtr(z)
+    lower = u - _BOUNDS_THRESHOLD < 0
+    upper = u + _BOUNDS_THRESHOLD > 1
+    x = np.interp(u, references, quantiles)
+    x[upper] = quantiles[-1]
+    x[lower] = quantiles[0]
+    return x
+
+
+def _map_columns(function: Callable[[int], np.ndarray], n_columns: int) -> List[np.ndarray]:
+    """Call ``function`` on every column index, in threads (NumPy and SciPy release the GIL)."""
+    workers = min(n_columns, os.cpu_count() or 1)
+    if workers <= 1:
+        return [function(i) for i in range(n_columns)]
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(function, range(n_columns)))
+
+
+def _finite(col: str) -> pl.Expr:
+    """Cast to Float64 and turn NaN and +/-inf into nulls."""
+    x = pl.col(col).cast(pl.Float64)
+    return pl.when(x.is_finite()).then(x).otherwise(None).alias(col)
+
+
 class NumericalTransformer:
+    """
+    Fill nulls in and scale numerical columns (including datetime columns already encoded
+    as float seconds).
+
+    Every statistic used by ``transform`` (fill values, scaling parameters, bin edges, the
+    quantile mapping) is computed once on the data passed to the constructor, so
+    transforming a test set never uses statistics of the test set itself.
+
+    Parameters
+    ----------
+    data : pl.DataFrame
+        Data the transformer is fitted on.
+    features : Sequence[str]
+        Columns to transform.
+    scaling : Dict[str, str]
+        Scaling method of each column: "none", "normalize", "standardize", "quantile" or "kbins".
+    num_fill_null : str or float
+        Strategy or value used to fill nulls (see ``Preprocessor``).
+    n_bins : int
+        Number of bins for the columns scaled with "kbins".
+    """
     def __init__(
         self,
-        data: pl.LazyFrame,
-        preprocessor,
+        data: pl.DataFrame,
+        features: Sequence[str],
+        scaling: Dict[str, str],
+        num_fill_null,
+        n_bins: int = 0,
     ):
-        scaling                 = preprocessor.scaling
-        self.scaling            = scaling
-        numerical_features      = preprocessor.numerical_features
-        self.numerical_features = numerical_features
-        n_bins                  = preprocessor.n_bins
+        self.numerical_features = tuple(features)
+        self.scaling            = dict(scaling)
+        self.num_fill_null      = num_fill_null
         self.n_bins             = n_bins
         self.n_bins_labels      = None
-        num_fill_null           = preprocessor.num_fill_null
-        self.num_fill_null      = num_fill_null
 
-        # Replace infinite values in the data
-        data = self.replace_inf(data, numerical_features)
-
-        if scaling == "none":
-            pass
-        elif scaling == "normalize":
-            # Normalization parameters initialization
-            self.numerical_parameters = [data.select(numerical_features).min(), 
-                                         data.select(numerical_features).max()]
-        elif scaling == "standardize":
-            # Standardization parameters initialization
-            self.numerical_parameters = [data.select(numerical_features).mean(), 
-                                         data.select(numerical_features).std()] 
-        elif scaling == "quantile":     
-            self.numerical_parameters = [data.select(numerical_features).min(), 
-                                         data.select(numerical_features).max()]
-            data = self.fill_null(data)
-            self.scaler = QuantileTransformer(output_distribution="normal", random_state=0).fit(data.select(numerical_features))
-        elif scaling == "kbins":
-            # K-bins discretizer parameters initialization
-            if n_bins==0:
-                raise ValueError("Specify a number of bins (n_bins) greater than 0.")
-            else:
-                self.n_bins_labels=list(map(str, list(range(0, n_bins)))) 
-        else:
-            raise ValueError(f"Unknown scaling method: {scaling}.")
-
-    def replace_inf(self, data, columns):
-        THRESHOLD = 1e308  # anything bigger is suspicious
-
-        # Replace values greater than THRESHOLD with None
-        data = data.with_columns([
-            pl.when(
-                (pl.col(col).is_infinite()) |
-                (pl.col(col) > THRESHOLD) |
-                (pl.col(col) < -THRESHOLD)
-            ).then(
-                None
-            ).otherwise(
-                pl.col(col)
+        data  = data.select([_finite(col) for col in self.numerical_features])
+        stats = data.select([
+            pl.struct(
+                pl.col(col).min().alias("min"),
+                pl.col(col).max().alias("max"),
+                pl.col(col).mean().alias("mean"),
+                pl.col(col).std().alias("std"),
+                pl.col(col).null_count().alias("null_count"),
             ).alias(col)
-            for col in columns
-        ])
-        return data
-    
-    def fill_null(self, data: pl.DataFrame): 
-              
-        num_fill_null = self.num_fill_null
-        numerical_features = self.numerical_features
-        scaling = self.scaling
-        col_num = pl.col(numerical_features)
+            for col in self.numerical_features
+        ]).row(0, named=True)
 
-        schema = data.collect_schema()
-        
-        if isinstance(num_fill_null, str):
-            if num_fill_null == "interpolate":
-                data = data.with_columns(col_num).interpolate()
-            elif num_fill_null == "none":
-                if scaling in ["quantile", "normalize"]:
-                    # Use min value for each column from numerical_parameters
-                    for col in numerical_features:
-                        col_min = self.numerical_parameters[0][col].item()
-                        data = data.with_columns(pl.col(col).fill_null(col_min-0.01).fill_nan(col_min-0.01))
-                else:
-                    # For standardization or other methods
-                    for col in numerical_features:
-                        if scaling == "standardize":
-                            # For standardization, we could use mean - 3*std as an approximation of min
-                            col_mean = self.numerical_parameters[0][col].item()
-                            col_std = self.numerical_parameters[1][col].item()
-                            col_min = col_mean - 3 * col_std - 0.01
-                        else:
-                            # Default fallback if we don't have min values
-                            col_min = -10
-                            data = data.with_columns(pl.col(col).fill_null(col_min).fill_nan(col_min))
-            else:
-                data = data.with_columns(col_num.fill_null(strategy=num_fill_null))
-        else:
-            data = data.with_columns(col_num.fill_null(num_fill_null).fill_nan(num_fill_null))
+        self.params = {}
+        for col, s in stats.items():
+            col_min = s["min"] if s["min"] is not None else 0.0
+            col_max = s["max"] if s["max"] is not None else col_min
+            col_range = col_max - col_min
+            self.params[col] = {
+                "min":       col_min,
+                "max":       col_max,
+                "mean":      s["mean"] if s["mean"] is not None else col_min,
+                # Constant columns are scaled by 1 instead of dividing by zero
+                "range":     col_range if col_range > 0 else 1.0,
+                "std":       s["std"] if s["std"] else 1.0,
+                "has_nulls": s["null_count"] > 0,
+            }
+        self.fill_values = {col: self._fill_value(col) for col in self.numerical_features}
 
-        # Return the dataframe with the original schema (fill_nan() may change the dtype of some columns)
-        return data.cast(schema)
+        filled = data.with_columns([self._fill_expr(col) for col in self.numerical_features])
 
-    def transform(self, data: pl.DataFrame):
-        """
-        Apply numerical transformations to the dataset.
+        self.quantile_features = tuple(col for col in self.numerical_features if self.scaling[col] == "quantile")
+        if self.quantile_features:
+            self.scaler = QuantileTransformer(
+                output_distribution="normal",
+                n_quantiles=max(1, min(1000, filled.height)),
+                random_state=0,
+            ).fit(filled.select(self.quantile_features).to_numpy())
 
-        This method fills null values and applies scaling techniques such as normalization, standardization, 
-        quantile transformation, or k-bins discretization to numerical features.
+        self.kbins_features = tuple(col for col in self.numerical_features if self.scaling[col] == "kbins")
+        if self.kbins_features:
+            if n_bins <= 0:
+                raise ValueError("Specify a number of bins (n_bins) greater than 0.")
+            self.n_bins_labels = list(map(str, range(n_bins)))
+            quantiles = np.linspace(0, 1, n_bins + 1)
+            self.bin_edges     = {}
+            self.bin_midpoints = {}
+            for col in self.kbins_features:
+                # Duplicate edges (heavily repeated values) collapse into fewer bins
+                edges = np.unique(np.quantile(filled[col].to_numpy(), quantiles))
+                self.bin_edges[col]     = edges[1:-1].tolist()
+                self.bin_midpoints[col] = ((edges[:-1] + edges[1:]) / 2).tolist() if edges.size > 1 else edges.tolist()
 
-        Parameters
-        ----------
-        data : pl.DataFrame
-            A Polars DataFrame containing numerical features to be transformed.
+    def _fill_value(self, col: str) -> float:
+        strategy = self.num_fill_null
+        p = self.params[col]
+        if not isinstance(strategy, str):
+            return float(strategy)
+        if strategy == "none":
+            return p["min"] - NULL_SENTINEL_OFFSET * p["range"]
+        if strategy in ("min", "max"):
+            return p[strategy]
+        if strategy == "zero":
+            return 0.0
+        if strategy == "one":
+            return 1.0
+        # "mean", and the fallback for nulls that "forward", "backward" and "interpolate" cannot fill
+        return p["mean"]
 
-        Returns
-        -------
-        pl.DataFrame
-            A Polars DataFrame with numerical features transformed based on the selected 
-            scaling method.
+    def _fill_expr(self, col: str) -> pl.Expr:
+        x = pl.col(col)
+        if self.num_fill_null == "interpolate":
+            x = x.interpolate().forward_fill().backward_fill()
+        elif self.num_fill_null == "forward":
+            x = x.forward_fill().backward_fill()
+        elif self.num_fill_null == "backward":
+            x = x.backward_fill().forward_fill()
+        return x.fill_null(self.fill_values[col]).alias(col)
 
-        Raises
-        ------
-        ValueError
-            If an invalid scaling method is provided.
-        """
-        scaling = self.scaling
-        numerical_features = self.numerical_features
-        
-        # Replace infinite values in the data
-        data = self.replace_inf(data, numerical_features)
-
-        # Fill null values with the specified strategy
-        data = self.fill_null(data)
-            
-        # Scale numerical features with the specified method
-        if scaling == "none":
-            pass
-        elif scaling == "normalize":
-            # Normalization of numerical features
-            for col in numerical_features:
-                col_min = self.numerical_parameters[0][col].item()
-                col_max = self.numerical_parameters[1][col].item()
-                data = data.with_columns((pl.col(col) - col_min) / (col_max - col_min))
+    def _scale_expr(self, col: str) -> pl.Expr:
+        x = pl.col(col)
+        p = self.params[col]
+        scaling = self.scaling[col]
+        if scaling == "normalize":
+            x = (x - p["min"]) / p["range"]
         elif scaling == "standardize":
-            # Standardization of numerical features
-            for col in numerical_features:
-                col_mean = self.numerical_parameters[0][col].item()
-                col_std  = self.numerical_parameters[1][col].item()
-                data = data.with_columns((pl.col(col) - col_mean) /  col_std) 
-        elif scaling == "quantile": 
-            # Ensure data is collected before passing to scaler
-            if isinstance(data, pl.LazyFrame):
-                num_data = data.select(numerical_features).collect()
-            else:
-                num_data = data.select(numerical_features)
-            
-            # Transform the data
-            transformed_data = self.scaler.transform(num_data)
-            
-            # Create DataFrame with transformed values
-            num_data = pl.DataFrame(transformed_data, schema=numerical_features)
-            
-            # Update original DataFrame with transformed values
-            for col in num_data.columns:
-                data = data.with_columns(num_data[col].alias(col))
+            x = (x - p["mean"]) / p["std"]
         elif scaling == "kbins":
-            # KBinsDiscretizer applied to numerical features
-            for col in numerical_features:
-                # Use qcut for each individual column
-                data = data.with_columns(
-                    pl.col(col).qcut(self.n_bins, labels=self.n_bins_labels).alias(col)
-                )
+            # Bin index = number of inner edges strictly below the value, i.e. bins are (a, b]
+            x = pl.lit(pl.Series(self.bin_edges[col], dtype=pl.Float64)).search_sorted(x, side="left").cast(pl.Int64)
+        return x.alias(col)
 
-        return data
+    def _unscale_expr(self, col: str) -> pl.Expr:
+        x = pl.col(col).cast(pl.Float64)
+        p = self.params[col]
+        scaling = self.scaling[col]
+        if scaling == "normalize":
+            x = x * p["range"] + p["min"]
+        elif scaling == "standardize":
+            x = x * p["std"] + p["mean"]
+        elif scaling == "kbins":
+            midpoints = self.bin_midpoints[col]
+            index = x.round().clip(0, len(midpoints) - 1).cast(pl.Int64)
+            x = pl.lit(pl.Series(midpoints, dtype=pl.Float64)).gather(index)
+        if self.num_fill_null == "none" and p["has_nulls"]:
+            threshold = p["min"] - NULL_SENTINEL_OFFSET / 2 * p["range"]
+            x = pl.when(x < threshold).then(None).otherwise(x)
+        return x.alias(col)
 
-
-    def inverse_transform(self, data: pl.DataFrame):
+    def transform(self, data: pl.DataFrame) -> pl.DataFrame:
         """
-        Reverse the transformations applied to numerical features.
-
-        This method restores the original numerical values by applying the inverse of 
-        the normalization, standardization, or quantile transformation that was applied 
-        during the preprocessing phase.
+        Fill nulls and scale the numerical columns of ``data``.
 
         Parameters
         ----------
         data : pl.DataFrame
-            A Polars DataFrame containing transformed numerical features.
+            Data containing every column in ``numerical_features``.
 
         Returns
         -------
         pl.DataFrame
-            A Polars DataFrame where numerical features have been reverted 
-            to their original scale.
-
-        Raises
-        ------
-        ValueError
-            If an invalid scaling method is provided.
+            ``data`` with the numerical columns transformed (Float64, or Int64 bin indices
+            for the "kbins" columns).
         """
-        numerical_features  = self.numerical_features
-        num_fill_null = self.num_fill_null
-        scaling = self.scaling
-
-        # If num_fill_null is "none", convert very negative values to NaN
-
-        # Numerical features
-        if scaling == "none":
-            pass
-        elif scaling == "normalize":
-            # Inverse normalization
-            for col in data.select(numerical_features).columns:
-                col_min = self.numerical_parameters[0][col].item()
-                col_max = self.numerical_parameters[1][col].item()
-                data = data.with_columns(pl.col(col) * (col_max - col_min) + col_min)
-        elif scaling == "standardize":
-            # Inverse standardization
-            for col in data.select(numerical_features).columns:
-                col_mean = self.numerical_parameters[0][col].item()
-                col_std  = self.numerical_parameters[1][col].item()
-                data = data.with_columns(pl.col(col) *  col_std + col_mean) 
-        elif scaling == "quantile":   
-            # Ensure data is collected before passing to scaler
-            if isinstance(data, pl.LazyFrame):
-                num_data = data.select(numerical_features).collect()
-            else:
-                num_data = data.select(numerical_features)
-            
-            # Inverse transform the data
-            inverse_transformed_data = self.scaler.inverse_transform(num_data)
-            
-            # Create DataFrame with inverse transformed values
-            num_data = pl.DataFrame(inverse_transformed_data, schema=numerical_features)
-            
-            # Update original DataFrame with inverse transformed values
-            for col in num_data.columns:
-                data = data.with_columns(num_data[col].alias(col))
-        
-        if num_fill_null=="none":
-            if scaling in ["quantile", "normalize"]:
-                for col in numerical_features:
-                    col_min = self.numerical_parameters[0][col].item()
-                    data = data.with_columns(
-                        pl.when(pl.col(col) <= col_min-0.01)
-                        .then(None)
-                        .otherwise(pl.col(col))
-                        .alias(col)
-                    )
-            else:
-                for col in numerical_features:
-                    if scaling == "standardize":
-                        col_mean = self.numerical_parameters[0][col].item()
-                        col_std = self.numerical_parameters[1][col].item()
-                        col_min = col_mean - 3 * col_std - 0.01
-                        data = data.with_columns(
-                            pl.when(pl.col(col) <= col_min)
-                            .then(None)
-                            .otherwise(pl.col(col))
-                            .alias(col)
-                        )
-                    else:
-                        data = data.with_columns(
-                            pl.when(pl.col(col) <= -8)
-                            .then(None)
-                            .otherwise(pl.col(col))
-                            .alias(col)
-                        )        
+        features = self.numerical_features
+        data = data.with_columns([_finite(col) for col in features])
+        data = data.with_columns([self._fill_expr(col) for col in features])
+        data = data.with_columns([self._scale_expr(col) for col in features])
+        if self.quantile_features:
+            data = data.with_columns(self._quantile_map(data, _quantile_to_normal))
         return data
 
+    def _quantile_map(self, data: pl.DataFrame, function) -> List[pl.Series]:
+        """Apply ``function`` with the fitted quantiles to every quantile-scaled column of ``data``."""
+        quantiles  = self.scaler.quantiles_
+        references = self.scaler.references_
+        def column(i: int) -> np.ndarray:
+            values = data.get_column(self.quantile_features[i]).to_numpy().astype(np.float64)
+            return function(values, quantiles[:, i], references)
+        values = _map_columns(column, len(self.quantile_features))
+        return [pl.Series(col, values[i]) for i, col in enumerate(self.quantile_features)]
 
+    def inverse_transform(self, data: pl.DataFrame) -> pl.DataFrame:
+        """
+        Reverse scaling and, with ``num_fill_null="none"``, restore the nulls.
 
-    
+        "kbins" columns are mapped back to the midpoint of their bin. Values do not need to
+        be exact transform outputs (e.g. they can come from a generative model).
+        """
+        columns  = set(data.columns)
+        features = [col for col in self.numerical_features if col in columns]
+        quantile_features = [col for col in self.quantile_features if col in columns]
+        if quantile_features:
+            if len(quantile_features) != len(self.quantile_features):
+                missing = sorted(set(self.quantile_features) - set(quantile_features))
+                raise ValueError(f"Quantile-scaled columns missing from the data: {missing}")
+            data = data.with_columns([_finite(col).fill_null(0.0) for col in self.quantile_features])
+            data = data.with_columns(self._quantile_map(data, _normal_to_quantile))
+        return data.with_columns([self._unscale_expr(col) for col in features])

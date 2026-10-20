@@ -1,0 +1,5 @@
+sphinx
+myst_parser
+sphinxemoji
+numpydoc
+sphinx_rtd_theme
