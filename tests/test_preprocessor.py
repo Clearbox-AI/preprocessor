@@ -111,10 +111,9 @@ def test_get_categorical_features(sample_pandas_df):
 #         preprocessor.transform(sample_pandas_df)
 
 
-@pytest.mark.skipif("tsfresh" not in [pkg.key for pkg in pytest.importorskip("pkg_resources").working_set],
-                    reason="tsfresh not installed")
 def test_extract_ts_features(sample_pandas_df):
     # Test tsfresh feature extraction
+    pytest.importorskip("tsfresh")
     
     # Set seed for reproducibility
     np.random.seed(42)

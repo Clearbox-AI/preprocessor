@@ -1,13 +1,7 @@
 numpy<2.0.0
 pandas<=2.2.3
+pyarrow
 scikit-learn
 scipy<=1.14
-polars<=1.17.1
+polars>=1.0,<=1.17.1
 tsfresh==0.20.3
-
-# Documentation
-sphinx 
-myst_parser
-sphinxemoji
-numpydoc
-sphinx_rtd_theme

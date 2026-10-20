@@ -7,11 +7,11 @@ long_description = (this_directory / "README.md").read_text()
 
 # Parse the requirements.txt file to get a list of dependencies
 with open("requirements.txt") as f:
-    requirements = f.read().splitlines()
+    requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 setup(
     name="clearbox-preprocessor",  
-    version="0.12.7",  
+    version="0.13.0",  
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
     description="A fast polars based data pre-processor for ML datasets",
