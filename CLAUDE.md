@@ -27,7 +27,7 @@ tsfresh is imported only inside `extract_ts_features`, because importing it take
 
 ## Release
 
-Pushing to `main` triggers `.github/workflows/pypi_publishing.yaml`. It builds and uploads to PyPI **only if the version in `setup.py` is not already on PyPI**, so a release means bumping `version=` in `setup.py`. `docs/source/conf.py` has its own `release`, which is out of sync. Read the Docs builds from `.readthedocs.yaml`: it installs `docs/requirements.txt` plus the package. `requirements.txt` feeds `install_requires`, so keep it runtime-only.
+Pushing to `main` triggers `.github/workflows/pypi_publishing.yaml`. It builds and uploads to PyPI **only if the version in `setup.py` is not already on PyPI**, so a release means bumping `version=` in `setup.py`. `docs/source/conf.py` has its own `release`; bump it together with `setup.py`. Read the Docs builds from `.readthedocs.yaml`: it installs `docs/requirements.txt` plus the package. `requirements.txt` feeds `install_requires`, so keep it runtime-only.
 
 ## Architecture
 
