@@ -23,7 +23,9 @@ python -m pytest tests/test_regressions.py::test_nulls_roundtrip   # single test
 make html                                # Sphinx docs -> docs/build/html (Makefile wraps sphinx-build)
 ```
 
-tsfresh is imported only inside `extract_ts_features`, because importing it takes about 2 s. tsfresh 0.20.3 also needs `pkg_resources` (setuptools < 81), and its numba dependency needs NumPy ≤ 1.26. The tsfresh test is skipped when tsfresh can't be imported.
+tsfresh is an optional extra (`pip install "clearbox-preprocessor[timeseries]"`) used only by `extract_ts_features`, which imports it on call: importing it takes about 2 s, and it pulls in numba. The tsfresh test is skipped when tsfresh can't be imported.
+
+`requirements.txt` has lower bounds only, except for Polars, which is capped below its next major version. The lower bounds are the oldest versions the test suite passes on (Polars 1.0 and 1.1 can't unpickle a fitted Preprocessor). Polars 1.28 is excluded because its date parser panics on `%d/%m/%Y` strings. Never call Polars' `round()`: its rounding of halves changed in 1.29, so decoding uses `utils.rounding.round_half_away`.
 
 ## Release
 

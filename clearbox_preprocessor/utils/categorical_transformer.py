@@ -91,7 +91,9 @@ class CategoricalTransformer:
             for col in features
             for i, name in enumerate(self.original_encoded_columns[col])
         ])
-        return pl.concat([data.drop(features), one_hot], how="horizontal")
+        # Not pl.concat(how="horizontal"), which warns on every call in late Polars 1.x, nor
+        # hstack, which fails there when the categorical columns were the only ones
+        return pl.DataFrame(data.drop(features).get_columns() + one_hot.get_columns())
 
     def inverse_transform(self, data: pl.DataFrame) -> pl.DataFrame:
         """

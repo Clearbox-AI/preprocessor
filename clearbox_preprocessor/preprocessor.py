@@ -12,6 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 from .utils.categorical_transformer import NULL_LABEL, OTHER_LABEL, CategoricalTransformer, clean_labels
 from .utils.datetime_transformer    import DatetimeTransformer, infer_string_datetime_format, is_temporal
 from .utils.numerical_transformer   import NumericalTransformer
+from .utils.rounding                import round_half_away
 
 # Share of rows above which a single label makes a categorical column uninformative
 DOMINANT_LABEL_THRESHOLD = 0.98
@@ -579,7 +580,7 @@ class Preprocessor:
         expr = pl.col(col)
         if dtype in _INTEGER_BOUNDS:
             bounds = _INTEGER_BOUNDS[dtype]
-            expr = expr.cast(pl.Float64).round().clip(float(bounds.min), float(bounds.max))
+            expr = round_half_away(expr.cast(pl.Float64)).clip(float(bounds.min), float(bounds.max))
         return expr.cast(dtype, strict=False).alias(col)
 
     @staticmethod
@@ -639,6 +640,8 @@ class Preprocessor:
 
         Raises
         ------
+        ImportError
+            If tsfresh is not installed (``pip install "clearbox-preprocessor[timeseries]"``).
         TypeError
             If the provided data is not a Polars LazyFrame or a Pandas or Polars DataFrame.
         TypeError
@@ -653,7 +656,12 @@ class Preprocessor:
         - The method stores the filtered features in ``self.features_filtered`` for further use.
         """
         # tsfresh is slow to import, so it is only imported when needed
-        from tsfresh import extract_features, extract_relevant_features
+        try:
+            from tsfresh import extract_features, extract_relevant_features
+        except ImportError as exc:
+            raise ImportError(
+                'extract_ts_features needs tsfresh: pip install "clearbox-preprocessor[timeseries]"'
+            ) from exc
 
         # Check if time column is provided, else fallback to self.time_id if available
         if time is None:

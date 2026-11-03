@@ -9,7 +9,7 @@
 project = 'Clearbox Preprocessor'
 copyright = '2024, Clearbox AI'
 author = 'Dario Brunelli'
-release = '0.13.0'
+release = '0.14.0'
 
 import os
 import sys

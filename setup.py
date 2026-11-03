@@ -11,7 +11,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="clearbox-preprocessor",  
-    version="0.13.0",  
+    version="0.14.0",
     author="Dario Brunelli",
     author_email="dario@clearbox.ai",
     description="A fast polars based data pre-processor for ML datasets",
@@ -24,6 +24,10 @@ setup(
     python_requires='>3.9',
     install_requires=requirements,
     extras_require={
+        # Preprocessor.extract_ts_features
+        "timeseries": [
+            "tsfresh>=0.21",
+        ],
         "dev": [
             "check-manifest",
             "pytest>3.9",
