@@ -9,6 +9,8 @@ import polars as pl
 from scipy.special import ndtr, ndtri
 from sklearn.preprocessing import QuantileTransformer
 
+from .rounding import round_half_away
+
 # Offset, as a fraction of the column range, of the value used to encode nulls when
 # ``num_fill_null="none"``. Nulls are encoded slightly below the column minimum and every
 # value below half that offset is decoded back to null.
@@ -198,7 +200,7 @@ class NumericalTransformer:
             x = x * p["std"] + p["mean"]
         elif scaling == "kbins":
             midpoints = self.bin_midpoints[col]
-            index = x.round().clip(0, len(midpoints) - 1).cast(pl.Int64)
+            index = round_half_away(x).clip(0, len(midpoints) - 1).cast(pl.Int64)
             x = pl.lit(pl.Series(midpoints, dtype=pl.Float64)).gather(index)
         if self.num_fill_null == "none" and p["has_nulls"]:
             threshold = p["min"] - NULL_SENTINEL_OFFSET / 2 * p["range"]

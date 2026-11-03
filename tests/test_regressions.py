@@ -141,6 +141,18 @@ def test_generated_data_is_decoded(rng):
     assert (inv["age"] - df["age"]).abs().max() <= 2
 
 
+def test_halves_are_rounded_away_from_zero():
+    # Polars' own round() rounds halves to even from 1.29: decoding must not depend on it
+    p = Preprocessor(pl.DataFrame({"n": [-3, -1, 0, 1, 2, 3, 2015]}))
+    inv = p.inverse_transform(np.array([[2014.5], [-0.5], [0.5], [1.5], [2.5], [-2.5]]))
+    assert inv["n"].to_list() == [2015, -1, 1, 2, 3, -3]
+
+    p = Preprocessor(pl.DataFrame({"x": np.arange(100.0)}), scaling="kbins", n_bins=4)
+    midpoints = p.numerical_transformer.bin_midpoints["x"]
+    inv = p.inverse_transform(np.array([[0.5], [2.5]]))
+    assert inv["x"].to_list() == [midpoints[1], midpoints[3]]
+
+
 def test_inverse_transform_from_numpy(rng):
     df = pl.DataFrame({"x": rng.normal(size=50), "c": rng.choice(list("ab"), 50), "keep": np.arange(50)})
     p = Preprocessor(df, excluded_col=["keep"], scaling="standardize")

@@ -4,6 +4,8 @@ from typing import Dict, Optional, Sequence
 
 import polars as pl
 
+from .rounding import round_half_away
+
 # Formats tried, in order, when checking whether a string column holds dates or times.
 # Formats without separators (bare "%Y", "%H", ...) are deliberately left out: they would
 # turn numeric codes such as "10" or "2023" into dates.
@@ -115,13 +117,13 @@ class DatetimeTransformer:
             # 10:01:00 instead of being truncated to 10:00:59
             resolution = _format_resolution(self.datetime_formats[col])
             if resolution is not None:
-                seconds = (seconds / resolution).round() * resolution
+                seconds = round_half_away(seconds / resolution) * resolution
         if dtype == pl.Time:
-            expr = (seconds * 1e9).round().cast(pl.Int64, strict=False).clip(0, _NS_PER_DAY - 1).cast(pl.Time)
+            expr = round_half_away(seconds * 1e9).cast(pl.Int64, strict=False).clip(0, _NS_PER_DAY - 1).cast(pl.Time)
         elif dtype == pl.Date:
-            expr = pl.from_epoch((seconds / _SECONDS_PER_DAY).round().cast(pl.Int64, strict=False), time_unit="d")
+            expr = pl.from_epoch(round_half_away(seconds / _SECONDS_PER_DAY).cast(pl.Int64, strict=False), time_unit="d")
         else:
-            expr = pl.from_epoch((seconds * 1e6).round().cast(pl.Int64, strict=False), time_unit="us")
+            expr = pl.from_epoch(round_half_away(seconds * 1e6).cast(pl.Int64, strict=False), time_unit="us")
             if isinstance(dtype, pl.Datetime):
                 if dtype.time_zone is not None:
                     expr = expr.dt.replace_time_zone("UTC").dt.convert_time_zone(dtype.time_zone)

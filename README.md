@@ -19,6 +19,12 @@ You can install the preprocessor by running the following command:
 $ pip install clearbox-preprocessor
 ```
 
+The time-series feature extraction (`extract_ts_features()`) needs tsfresh, which is an optional extra:
+
+```shell
+$ pip install "clearbox-preprocessor[timeseries]"
+```
+
 ## Preprocessing customization
 A bunch of options are available to customize the preprocessing. 
 
